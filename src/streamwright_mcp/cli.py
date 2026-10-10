@@ -7,7 +7,7 @@ import sys
 from streamwright_mcp.server import server
 
 
-def main() -> None:
+def main(argv=None) -> None:
     parser = argparse.ArgumentParser(
         description="StreamWright Model Context Protocol (MCP) server."
     )
@@ -17,7 +17,7 @@ def main() -> None:
         default="stdio",
         help="MCP transport protocol (default: stdio)",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     server.run(transport=args.transport)
 
