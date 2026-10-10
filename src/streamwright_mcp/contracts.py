@@ -169,3 +169,49 @@ def get_core_schema(kind: str = "all") -> Dict[str, Any]:
         result["dsl_specification"] = inspect.getdoc(core_schema) or ""
 
     return result
+
+
+def get_cli_reference(command: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Guides the AI assistant on how to inspect, discover, and execute StreamWright CLI commands.
+    Directs the LLM to run or inspect the live CLI help directly in the user's terminal/workspace.
+
+    Args:
+        command: Optional subcommand to inspect ('run', 'validate', 'connectors', 'mcp').
+    """
+    subcommand = (command or "").strip().lower()
+
+    if subcommand in ("run", "validate", "connectors", "mcp"):
+        return {
+            "binary": "streamwright",
+            "alias": "sw",
+            "command": subcommand,
+            "instruction": f"To get the most accurate and up-to-date options for '{subcommand}', inspect the CLI directly by running or checking: `sw {subcommand} --help` (or `streamwright {subcommand} --help`).",
+            "recommended_command": f"sw {subcommand} --help",
+            "fallback_command": f"python -m streamwright.core.cli {subcommand} --help",
+            "summary": {
+                "run": "Executes a pipeline source and exports records to Singer, JSONL, Parquet, DuckDB, or dlt.",
+                "validate": "Statically validates source and stream YAML configurations, refs, and DuckDB SQL.",
+                "connectors": "Lists installed connectors or searches/installs connectors from the StreamWright Hub.",
+                "mcp": "Runs the StreamWright Model Context Protocol server for AI coding assistants.",
+            }.get(subcommand, ""),
+        }
+
+    return {
+        "binary": "streamwright",
+        "alias": "sw",
+        "invocation_notes": "Both 'sw' and 'streamwright' are completely interchangeable.",
+        "instruction": "To discover all commands and live options, ask the user's terminal to inspect: `sw --help` (or `streamwright --help`). For specific subcommands, run `sw <command> --help`.",
+        "recommended_command": "sw --help",
+        "fallback_command": "python -m streamwright.core.cli --help",
+        "available_subcommands": {
+            "run": "sw run --help",
+            "validate": "sw validate --help",
+            "connectors": "sw connectors --help",
+            "mcp": "sw mcp --help",
+        },
+    }
+
+
+
+

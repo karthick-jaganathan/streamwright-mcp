@@ -14,6 +14,7 @@ except ImportError:
     from mcp.server.fastmcp import FastMCP as MCPServer
 
 from streamwright_mcp.contracts import (
+    get_cli_reference as _get_cli_reference,
     get_connector_contract as _get_contract,
     get_core_schema as _get_schema,
     list_installed_connectors,
@@ -117,6 +118,18 @@ def inspect_stream_transform(source_dir: str, stream_name: str) -> Dict[str, Any
         stream_name: Name of the stream to inspect.
     """
     return _inspect_transform(source_dir, stream_name)
+
+
+@server.tool()
+def get_cli_reference(command: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Guides the AI assistant on how to inspect, discover, and run StreamWright CLI commands.
+    Directs the LLM to run and inspect `sw --help` or `sw <subcommand> --help` directly in the user's workspace.
+
+    Args:
+        command: Optional subcommand to inspect ('run', 'validate', 'connectors', 'mcp').
+    """
+    return _get_cli_reference(command)
 
 
 # Resources

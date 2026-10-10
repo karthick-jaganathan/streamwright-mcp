@@ -33,13 +33,28 @@ pip install -e .
 
 ### Claude Desktop / Antigravity / Cursor Configuration
 
-Add `streamwright-mcp` to your MCP client configuration (e.g. `claude_desktop_config.json` or `mcp.json`):
+Add `streamwright-mcp` to your MCP client configuration (e.g. `claude_desktop_config.json` or `mcp.json`).
+
+Using the standalone command:
 
 ```json
 {
   "mcpServers": {
     "streamwright": {
       "command": "streamwright-mcp"
+    }
+  }
+}
+```
+
+Or via the StreamWright CLI shorthand `sw mcp` / `streamwright mcp`:
+
+```json
+{
+  "mcpServers": {
+    "streamwright": {
+      "command": "sw",
+      "args": ["mcp"]
     }
   }
 }
@@ -69,6 +84,7 @@ Or run via python directly:
 | `get_core_schema` | Returns the formal schema and DSL definition for `source.yaml` and `streams/*.yaml`. |
 | `validate_source_config` | Runs static validation checks on a local pipeline directory and returns errors, warnings, and file locations. |
 | `inspect_stream_transform` | Parses and explains the SQL steps, dependencies, inputs, and exports of a specific stream. |
+| `get_cli_reference` | Returns the authoritative reference for StreamWright CLI commands, options, outputs, execution recipes, and the `sw` alias. |
 
 ---
 
