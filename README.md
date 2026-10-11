@@ -1,41 +1,47 @@
 # StreamWright MCP Server
 
-Model Context Protocol (MCP) server for [StreamWright](https://streamwright.web.app), the zero-code, declarative ELT framework.
+[![PyPI version](https://img.shields.io/pypi/v/streamwright-mcp.svg)](https://pypi.org/project/streamwright-mcp/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
-Provides AI coding assistants (Claude Desktop, Cursor, Antigravity, Roo Code, GitHub Copilot) with programmatic access to:
-1. **In-Code Connector Contracts**: Complete contracts, `source.yaml` specs, `streams/*.yaml` syntax, authentication parameters, DuckDB SQL transforms, and execution details.
-2. **Core Schema & DSL Specification**: Draft 7 JSON schemas and comprehensive reference contracts for `source.yaml` and stream configurations.
-3. **Static Source Validation**: Validates pipelines and provides file:line:column pinpoint diagnostics before execution.
-4. **Transform Inspection & Analysis**: Inspects stream SQL transforms, dependencies, inputs, and exports.
-5. **Zero Duplication**: Dynamically inspects installed StreamWright packages and modules directly from code—no fragile static YAML duplication or local catalog caches.
+**StreamWright MCP** is the official [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for [StreamWright](https://streamwright.web.app), the declarative data integration and ELT framework.
+
+It allows AI coding assistants (such as Claude Desktop, Cursor, Google Antigravity, GitHub Copilot, and Zed) to inspect installed connectors, query Draft-7 pipeline schemas, validate YAML sources with pinpoint error locations, and analyze DuckDB SQL transform pipelines in real time — eliminating hallucinations when building data pipelines.
+
+---
+
+## Key Capabilities
+
+- **In-Code Connector Contracts**: Introspects installed connector packages (`restapi`, `postgres`, `s3`, etc.) directly from Python entry points to extract live contracts, authentication specs, and transport behaviors without static copies.
+- **Hub Discovery**: Discovers uninstalled connectors from the StreamWright Hub registry and provides instant installation recipes.
+- **Static Pipeline Validation**: Validates `source.yaml` and `streams/*.yaml` pipelines before execution, returning structured diagnostics with file, line, and column locations.
+- **SQL Transform Inspection**: Parses and traces multi-step DuckDB SQL transformations, table dependencies, and export formats for any stream.
+- **Core DSL Schemas**: Exposes authoritative Draft-7 JSON schemas for editor autocomplete, linting, and LLM grounding.
+- **CLI Guidance**: Steers AI agents to explore live CLI commands (`sw run`, `sw validate`, `sw connectors`, `sw mcp`) in the local workspace.
 
 ---
 
 ## Installation
 
-Install via pip in your StreamWright Python environment:
+Install via `pip`:
 
 ```bash
 pip install streamwright-mcp
 ```
 
-Or install in development mode:
+Or using `uv`:
 
 ```bash
-git clone https://github.com/karthick-jaganathan/streamwright-mcp.git
-cd streamwright-mcp
-pip install -e .
+uv pip install streamwright-mcp
 ```
 
 ---
 
 ## Configuration
 
-### Claude Desktop / Antigravity / Cursor Configuration
+Add `streamwright-mcp` to your MCP client configuration file (e.g., `claude_desktop_config.json`, `mcp.json`, or Antigravity's `mcp_config.json`).
 
-Add `streamwright-mcp` to your MCP client configuration (e.g. `claude_desktop_config.json` or `mcp.json`).
-
-Using the standalone command:
+### Standard Configuration
 
 ```json
 {
@@ -47,7 +53,9 @@ Using the standalone command:
 }
 ```
 
-Or via the StreamWright CLI shorthand `sw mcp` / `streamwright mcp`:
+### Using StreamWright CLI Shorthand (`sw`)
+
+If you have `streamwright` installed, you can launch the MCP server directly via `sw mcp`:
 
 ```json
 {
@@ -60,14 +68,16 @@ Or via the StreamWright CLI shorthand `sw mcp` / `streamwright mcp`:
 }
 ```
 
-Or run via python directly:
+### Ephemeral Execution (`uvx`)
+
+Run on-demand without installing into your global environment:
 
 ```json
 {
   "mcpServers": {
     "streamwright": {
-      "command": "python",
-      "args": ["-m", "streamwright_mcp.cli"]
+      "command": "uvx",
+      "args": ["streamwright-mcp"]
     }
   }
 }
@@ -75,27 +85,47 @@ Or run via python directly:
 
 ---
 
-## Tools
+## Usage
 
-| Tool | Description |
-|------|-------------|
-| `list_connectors` | Lists installed StreamWright connectors and optionally discovers uninstalled connectors from the StreamWright Hub. |
-| `get_connector_contract` | Retrieves the full in-code 5-part contract (`source.yaml`, `streams/*.yaml`, auth, methods, execution) for any connector. If not installed, provides the installation command. |
-| `get_core_schema` | Returns the formal schema and DSL definition for `source.yaml` and `streams/*.yaml`. |
-| `validate_source_config` | Runs static validation checks on a local pipeline directory and returns errors, warnings, and file locations. |
-| `inspect_stream_transform` | Parses and explains the SQL steps, dependencies, inputs, and exports of a specific stream. |
-| `get_cli_reference` | Returns the authoritative reference for StreamWright CLI commands, options, outputs, execution recipes, and the `sw` alias. |
+### Starting the Server
+
+The server runs over standard input/output (`stdio`) by default:
+
+```bash
+streamwright-mcp
+```
+
+You can also specify transport options:
+
+```bash
+# stdio (default)
+streamwright-mcp --transport stdio
+
+# Server-Sent Events (SSE)
+streamwright-mcp --transport sse
+```
+
+Or run as a Python module:
+
+```bash
+python -m streamwright_mcp.cli
+```
 
 ---
 
 ## Resources
 
-- `streamwright://schema/source`: JSON Schema (Draft 7) for `source.yaml`.
-- `streamwright://schema/stream`: JSON Schema (Draft 7) for `streams/<stream>.yaml`.
-- `streamwright://schema/core`: Complete markdown contract of the StreamWright DSL.
+MCP clients that support resource attachments can access:
+
+- `streamwright://schema/source` — JSON Schema (Draft 7) for `source.yaml`.
+- `streamwright://schema/stream` — JSON Schema (Draft 7) for `streams/<stream>.yaml`.
+- `streamwright://schema/core` — Full Markdown specification of the StreamWright DSL.
 
 ---
 
-## License
+## Documentation & Ecosystem
 
-Apache-2.0
+- **Documentation**: https://streamwright.web.app
+- **MCP Guide**: https://streamwright.web.app/docs/ai/mcp
+- **Core Package**: https://pypi.org/project/streamwright/
+- **Repository**: https://github.com/karthick-jaganathan/streamwright-mcp
