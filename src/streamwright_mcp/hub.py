@@ -61,30 +61,24 @@ def list_hub_connectors(timeout: float = 3.0) -> List[Dict[str, Any]]:
                 name = item.get("name", "")
                 if name.endswith(".yaml"):
                     conn_name = name[:-5]
-                    conn_data = fetch_hub_connector(conn_name, timeout=timeout)
-                    if conn_data:
-                        connectors.append(conn_data)
-                    else:
-                        connectors.append({
-                            "key": conn_name,
-                            "title": conn_name.replace("_", " ").title(),
-                            "install_hint": f"pip install streamwright-{conn_name.replace('_', '-')}"
-                        })
+                    connectors.append({
+                        "key": conn_name,
+                        "title": conn_name.replace("_", " ").title(),
+                        "install_hint": f"sw connectors install {conn_name}",
+                        "note": "Connectors are managed through StreamWright Hub (run 'sw connectors install <key>' or 'sw connectors -i <key>').",
+                    })
             if connectors:
                 return connectors
     except Exception as exc:
         LOG.debug("Failed to list connectors from GitHub API: %s", exc)
 
-    # Fallback to known list
+    # Fallback to known list without redundant network calls
     for name in KNOWN_HUB_CONNECTORS:
-        conn_data = fetch_hub_connector(name, timeout=timeout)
-        if conn_data:
-            connectors.append(conn_data)
-        else:
-            connectors.append({
-                "key": name,
-                "title": name.replace("_", " ").title(),
-                "install_hint": f"pip install streamwright-{name.replace('_', '-')}"
-            })
+        connectors.append({
+            "key": name,
+            "title": name.replace("_", " ").title(),
+            "install_hint": f"sw connectors install {name}",
+            "note": "Connectors are managed through StreamWright Hub (run 'sw connectors install <key>' or 'sw connectors -i <key>').",
+        })
 
     return connectors

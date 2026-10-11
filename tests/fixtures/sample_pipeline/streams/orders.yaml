@@ -1,0 +1,22 @@
+requests:
+  - name: raw_orders
+    http:
+      path: /v1/orders
+      method: GET
+
+transform:
+  mode: page
+  steps:
+    - name: clean_orders
+      description: Flatten orders and format fields
+      select: |
+        SELECT record->>'id'     AS order_id,
+               record->>'status' AS status,
+               record->>'total'  AS total
+        FROM raw_orders
+
+export:
+  orders:
+    step: clean_orders
+    primary_key: [order_id]
+    description: Exported clean orders

@@ -1,12 +1,12 @@
-import os
+from pathlib import Path
 import pytest
 from streamwright_mcp.validator import validate_source_config
 
+FIXTURE_PATH = str(Path(__file__).parent / "fixtures" / "sample_pipeline")
+
 
 def test_validate_source_config_valid():
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    example_path = "/Users/kjaganathan/repos/streamwright/examples/sources/ads/openai_ads"
-    result = validate_source_config(example_path)
+    result = validate_source_config(FIXTURE_PATH)
     assert result["valid"] is True
     assert result["error_count"] == 0
     assert "Valid" in result["summary"]

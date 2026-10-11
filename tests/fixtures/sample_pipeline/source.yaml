@@ -1,0 +1,16 @@
+kind: source
+name: sample_orders
+description: Sample orders pipeline for test verification.
+
+spec:
+  secrets:
+    api_token: {type: string}
+
+auth:
+  type: bearer
+  token: "{{ secrets.api_token }}"
+
+http:
+  base_url: https://api.example.com
+  paginator: {type: cursor, token_path: last_id, param: after}
+  records: {path: data}

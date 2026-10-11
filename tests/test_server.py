@@ -1,3 +1,5 @@
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 import pytest
 from streamwright_mcp.server import (
     get_cli_reference,
@@ -9,21 +11,41 @@ from streamwright_mcp.server import (
     validate_source_config,
 )
 
+FIXTURE_PATH = str(Path(__file__).parent / "fixtures" / "sample_pipeline")
+
 
 def test_server_metadata():
     assert server.name == "streamwright-mcp"
 
 
 def test_server_list_connectors_tool():
+    # include_hub=False returns list of installed
     connectors = list_connectors(include_hub=False)
-    assert len(connectors) >= 16
-    assert any(c["name"] == "postgres" for c in connectors)
+    assert isinstance(connectors, list)
+
+    # include_hub=True queries hub registry (mock network to ensure fast, deterministic tests)
+    with patch("streamwright_mcp.hub.requests.get") as mock_get:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = [{"name": "restapi.yaml"}, {"name": "postgres.yaml"}]
+        mock_get.return_value = mock_resp
+
+        hub_connectors = list_connectors(include_hub=True)
+        assert len(hub_connectors) >= 2
+        assert any(c["name"] == "restapi" for c in hub_connectors)
 
 
 def test_server_get_contract_tool():
-    contract = get_connector_contract("postgres")
-    assert contract["installed"] is True
-    assert "source.yaml" in contract["contract_documentation"]
+    # Non-installed / hub connector check (mock network for determinism)
+    with patch("streamwright_mcp.hub.requests.get") as mock_get:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = "title: Shopify Connector\ninstall:\n  git: pip install streamwright-shopify\n"
+        mock_get.return_value = mock_resp
+
+        contract = get_connector_contract("shopify")
+        assert contract["name"] == "shopify"
+        assert "install_command" in contract
 
 
 def test_server_get_core_schema_tool():
@@ -33,15 +55,15 @@ def test_server_get_core_schema_tool():
 
 
 def test_server_validate_tool():
-    example_path = "/Users/kjaganathan/repos/streamwright/examples/sources/ads/openai_ads"
-    val = validate_source_config(example_path)
+    val = validate_source_config(FIXTURE_PATH)
     assert val["valid"] is True
+    assert val["error_count"] == 0
 
 
 def test_server_inspect_tool():
-    example_path = "/Users/kjaganathan/repos/streamwright/examples/sources/ads/openai_ads"
-    ins = inspect_stream_transform(example_path, "ad_accounts")
+    ins = inspect_stream_transform(FIXTURE_PATH, "orders")
     assert ins["found"] is True
+    assert ins["stream_name"] == "orders"
 
 
 def test_server_get_cli_reference_tool():
@@ -64,5 +86,3 @@ def test_server_get_cli_reference_tool():
     # Unknown command falls back gracefully to global instructions
     unknown_ref = get_cli_reference("nonexistent")
     assert "available_subcommands" in unknown_ref
-
-

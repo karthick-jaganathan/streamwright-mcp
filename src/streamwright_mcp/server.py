@@ -83,14 +83,15 @@ def get_connector_contract(name: str) -> Dict[str, Any]:
 
 
 @server.tool()
-def get_core_schema(kind: str = "all") -> Dict[str, Any]:
+def get_core_schema(kind: str = "all", section: Optional[str] = None) -> Dict[str, Any]:
     """
     Returns the formal Draft 7 JSON schema and declarative DSL specification for StreamWright.
 
     Args:
-        kind: 'source' (source.yaml schema), 'stream' (streams/*.yaml schema), or 'all' (both schemas plus full DSL documentation).
+        kind: 'all' (default), 'source' (source.yaml schema), 'stream' (streams/*.yaml schema), or 'dsl' (concise markdown DSL reference guide).
+        section: Optional specific definition to extract (e.g. 'paginator', 'auth', 'http_request', 'records', 'transform', 'export', 'partitions', 'incremental').
     """
-    return _get_schema(kind)
+    return _get_schema(kind, section=section)
 
 
 @server.tool()

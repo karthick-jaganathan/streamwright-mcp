@@ -130,31 +130,66 @@ def get_connector_contract(name: str) -> Dict[str, Any]:
 
     # Not installed: look up in StreamWright Hub
     hub_data = fetch_hub_connector(name)
-    install_cmd = f"pip install streamwright-{name.replace('_', '-')}"
+    install_cmd = f"sw connectors install {name}"
+    note = f"Connectors are managed through StreamWright Hub (run '{install_cmd}' or 'sw connectors -i {name}')."
     if hub_data and "install" in hub_data and isinstance(hub_data["install"], dict):
         git_target = hub_data["install"].get("git")
         if git_target:
-            install_cmd = f"pip install \"{git_target}\""
+            note += f" Direct source target: pip install \"{git_target}\""
 
     return {
         "name": name,
         "installed": False,
         "message": f"Connector '{name}' is not installed in the current Python environment.",
         "install_command": install_cmd,
+        "note": note,
         "hub_metadata": hub_data or {
             "title": name.replace("_", " ").title(),
             "install_hint": install_cmd,
+            "note": note,
         },
     }
 
 
-def get_core_schema(kind: str = "all") -> Dict[str, Any]:
+def get_core_schema(kind: str = "all", section: Optional[str] = None) -> Dict[str, Any]:
     """
     Returns the formal JSON schema and DSL documentation for StreamWright sources and streams.
 
     Args:
-        kind: 'source', 'stream', or 'all' (default).
+        kind: 'source', 'stream', 'dsl' (concise markdown guide), or 'all' (default).
+        section: Optional specific definition name to extract (e.g. 'paginator', 'auth', 'http_request', 'records').
     """
+    if section:
+        clean_section = section.replace("definitions.", "").strip().lower()
+        stream_defs = core_schema.stream_json_schema().get("definitions", {})
+        if clean_section in stream_defs:
+            return {
+                "version": core_schema.VERSION,
+                "section": clean_section,
+                "definition": stream_defs[clean_section],
+            }
+        source_defs = core_schema.json_schema().get("definitions", {})
+        if clean_section in source_defs:
+            return {
+                "version": core_schema.VERSION,
+                "section": clean_section,
+                "definition": source_defs[clean_section],
+            }
+        available = sorted(list(set(list(stream_defs.keys()) + list(source_defs.keys()))))
+        return {
+            "version": core_schema.VERSION,
+            "error": f"Section '{section}' not found in schema definitions.",
+            "available_sections": available,
+        }
+
+    if kind == "dsl":
+        return {
+            "version": core_schema.VERSION,
+            "supported_versions": list(core_schema.SUPPORTED_VERSIONS),
+            "kind": "dsl",
+            "dsl_specification": inspect.getdoc(core_schema) or "",
+        }
+
     result: Dict[str, Any] = {
         "version": core_schema.VERSION,
         "supported_versions": list(core_schema.SUPPORTED_VERSIONS),
@@ -181,6 +216,12 @@ def get_cli_reference(command: Optional[str] = None) -> Dict[str, Any]:
     """
     subcommand = (command or "").strip().lower()
 
+    env_hints = [
+        "If 'sw' is not found in PATH, verify your active virtual environment or pyenv version.",
+        "Locate the binary using: 'which sw', 'pyenv which sw', or 'which streamwright'.",
+        "Direct execution via active Python interpreter: '<python_bin> -m streamwright.core.cli <args>'."
+    ]
+
     if subcommand in ("run", "validate", "connectors", "mcp"):
         return {
             "binary": "streamwright",
@@ -189,6 +230,7 @@ def get_cli_reference(command: Optional[str] = None) -> Dict[str, Any]:
             "instruction": f"To get the most accurate and up-to-date options for '{subcommand}', inspect the CLI directly by running or checking: `sw {subcommand} --help` (or `streamwright {subcommand} --help`).",
             "recommended_command": f"sw {subcommand} --help",
             "fallback_command": f"python -m streamwright.core.cli {subcommand} --help",
+            "environment_hints": env_hints,
             "summary": {
                 "run": "Executes a pipeline source and exports records to Singer, JSONL, Parquet, DuckDB, or dlt.",
                 "validate": "Statically validates source and stream YAML configurations, refs, and DuckDB SQL.",
@@ -204,6 +246,7 @@ def get_cli_reference(command: Optional[str] = None) -> Dict[str, Any]:
         "instruction": "To discover all commands and live options, ask the user's terminal to inspect: `sw --help` (or `streamwright --help`). For specific subcommands, run `sw <command> --help`.",
         "recommended_command": "sw --help",
         "fallback_command": "python -m streamwright.core.cli --help",
+        "environment_hints": env_hints,
         "available_subcommands": {
             "run": "sw run --help",
             "validate": "sw validate --help",

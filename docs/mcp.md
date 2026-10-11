@@ -136,10 +136,12 @@ Retrieves the live 5-part contract specification for an individual connector.
     "name": "salesforce",
     "installed": false,
     "message": "Connector 'salesforce' is not installed in the current Python environment.",
-    "install_command": "pip install streamwright-salesforce",
+    "install_command": "sw connectors install salesforce",
+    "note": "Connectors are managed through StreamWright Hub (run 'sw connectors install salesforce' or 'sw connectors -i salesforce').",
     "hub_metadata": {
       "title": "Salesforce Connector",
-      "install_hint": "pip install streamwright-salesforce"
+      "install_hint": "sw connectors install salesforce",
+      "note": "Connectors are managed through StreamWright Hub (run 'sw connectors install salesforce' or 'sw connectors -i salesforce')."
     }
   }
   ```
@@ -152,48 +154,56 @@ Returns the authoritative Draft-7 JSON Schemas and declarative DSL documentation
 
 - **Parameters**:
   - `kind` *(string, default: `"all"`)*:
+    - `"all"`: Returns both schemas plus the full Markdown DSL specification.
+    - `"dsl"`: Returns exclusively the human-readable Markdown DSL specification (~3.7 KB), saving ~90% tokens when JSON schema validation rules are not needed.
     - `"source"`: Returns JSON Schema for `source.yaml`.
     - `"stream"`: Returns JSON Schema for `streams/*.yaml`.
-    - `"all"`: Returns both schemas plus the full Markdown DSL specification.
+  - `section` *(string, optional)*: Specific sub-definition to extract from the schema (e.g., `"paginator"`, `"auth"`, `"records"`, `"retry"`, `"http_request"`, `"transform"`, `"export"`, `"partitions"`, `"incremental"`). When provided, returns only the focused definition schema to keep LLM context minimal and precise.
 
-- **Example Call**:
+- **Example Call (Full DSL Guide)**:
   ```json
   {
     "name": "get_core_schema",
     "arguments": {
-      "kind": "all"
+      "kind": "dsl"
     }
   }
   ```
 
-- **Example Response**:
+- **Example Response (`kind: "dsl"`)**:
   ```json
   {
     "version": "1.0.0",
     "supported_versions": ["1.0.0"],
-    "kind": "all",
-    "source_schema": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "StreamWright Source Configuration",
-      "type": "object",
-      "required": ["version", "source"],
-      "properties": {
-        "version": {"type": "string"},
-        "source": {"type": "object"}
-      }
-    },
-    "stream_schema": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "StreamWright Stream Configuration",
-      "type": "object",
-      "required": ["name"],
-      "properties": {
-        "name": {"type": "string"},
-        "request": {"type": "object"},
-        "transform": {"type": "object"}
-      }
-    },
+    "kind": "dsl",
     "dsl_specification": "# StreamWright Declarative DSL Specification..."
+  }
+  ```
+
+- **Example Call (Focused Section)**:
+  ```json
+  {
+    "name": "get_core_schema",
+    "arguments": {
+      "section": "paginator"
+    }
+  }
+  ```
+
+- **Example Response (`section: "paginator"`)**:
+  ```json
+  {
+    "section": "paginator",
+    "definition": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {"type": "string", "enum": ["cursor", "offset", "page_number", "next_url"]},
+        "param": {"type": "string"},
+        "token_path": {"type": "string"},
+        "page_size": {"type": "integer"}
+      }
+    }
   }
   ```
 
@@ -261,11 +271,16 @@ Performs static validation on a pipeline source folder or file without executing
 
 ### 5. `inspect_stream_transform`
 
-Parses and explains the execution plan, DuckDB SQL transform stages, table inputs, and export targets for an individual stream.
+Parses and explains the execution plan, DuckDB SQL transform stages, projected columns, table dependencies, and export targets (including primary key verification) for an individual stream.
 
 - **Parameters**:
   - `source_dir` *(string, required)*: Path to the source directory.
   - `stream_name` *(string, required)*: Name of the stream to analyze.
+
+- **Key Diagnostics**:
+  - `projected_columns`: Statically extracted output column names and aliases from each SQL transformation step.
+  - `primary_key_status`: Advisory validation status (`"verified"`, `"unverified (missing in step projections: [...])"`, `"unverified (wildcard SELECT *)"`).
+  - `primary_key_valid`: Boolean flag (`true`, `false`, or `null` for wildcards) alerting AI agents if an export primary key is omitted from its upstream SQL projection.
 
 - **Example Call**:
   ```json
@@ -282,29 +297,45 @@ Parses and explains the execution plan, DuckDB SQL transform stages, table input
   ```json
   {
     "found": true,
+    "source_dir": "./pipelines/ecommerce",
     "stream_name": "orders",
-    "requests": {
-      "path": "/v1/orders",
-      "method": "GET",
-      "pagination": "cursor",
-      "partition_by": "status"
-    },
-    "transform_steps": [
+    "file_path": "./pipelines/ecommerce/streams/orders.yaml",
+    "requests": [
       {
-        "step_name": "flatten_line_items",
-        "sql": "SELECT id, unnest(line_items) AS item, created_at FROM raw_orders",
-        "referenced_tables": ["raw_orders"]
-      },
-      {
-        "step_name": "calculate_totals",
-        "sql": "SELECT id, sum(item.price * item.quantity) AS total_amount FROM flatten_line_items GROUP BY id",
-        "referenced_tables": ["flatten_line_items"]
+        "name": "raw_orders",
+        "path": "/v1/orders",
+        "method": "GET",
+        "paginator": {
+          "type": "cursor",
+          "param": "starting_after"
+        }
       }
     ],
+    "transform": {
+      "mode": "page",
+      "steps": [
+        {
+          "name": "flatten_orders",
+          "description": "Extracts order details and timestamps",
+          "select_sql": "SELECT record->>'id' AS order_id, record->>'status' AS status, strptime(record->>'created_at', '%Y-%m-%dT%H:%M:%SZ') AS created_at FROM raw_orders",
+          "inputs": [
+            {
+              "type": "raw_request",
+              "name": "raw_orders"
+            }
+          ],
+          "projected_columns": ["order_id", "status", "created_at"]
+        }
+      ]
+    },
     "exports": [
       {
-        "format": "parquet",
-        "destination": "s3://my-lakehouse/orders/"
+        "name": "orders",
+        "step": "flatten_orders",
+        "primary_key": ["order_id"],
+        "primary_key_status": "verified",
+        "primary_key_valid": true,
+        "description": "Clean orders exported to destination"
       }
     ]
   }
@@ -314,7 +345,7 @@ Parses and explains the execution plan, DuckDB SQL transform stages, table input
 
 ### 6. `get_cli_reference`
 
-Provides authoritative reference and live inspection guidance for StreamWright CLI commands and the `sw` alias. Rather than returning hardcoded or outdated flags, it instructs the AI agent to inspect live help in the caller's workspace.
+Provides authoritative reference, live inspection guidance, and virtual environment discovery hints for StreamWright CLI commands and the `sw` alias. Rather than returning hardcoded or outdated flags, it instructs the AI agent to inspect live help in the caller's workspace.
 
 - **Parameters**:
   - `command` *(string, optional)*: Subcommand to inspect (`"run"`, `"validate"`, `"connectors"`, `"mcp"`). Omit to get all commands.
@@ -338,6 +369,10 @@ Provides authoritative reference and live inspection guidance for StreamWright C
     "instruction": "To get the most accurate and up-to-date options for 'run', inspect the CLI directly by running or checking: `sw run --help` (or `streamwright run --help`).",
     "recommended_command": "sw run --help",
     "fallback_command": "python -m streamwright.core.cli run --help",
+    "environment_hints": [
+      "If 'sw' or 'streamwright' is not found in PATH, check your virtualenv or run: `pyenv which sw` or `which streamwright`",
+      "You can always invoke CLI via python module directly in your active virtual environment: `python -m streamwright.core.cli [command]`"
+    ],
     "summary": "Executes a pipeline source and exports records to Singer, JSONL, Parquet, DuckDB, or dlt."
   }
   ```
