@@ -103,6 +103,19 @@ def build_server(registry: EngineRegistry) -> MCPServer:
         return connectors.get_connector_contract(registry, name, engine)
 
     @server.tool()
+    def get_connector_guide(name: str, section: str | None = None) -> ToolResult:
+        """
+        An installed connector's user guide, paged by section: examples, its query builder (e.g. google_ads `gaql`:
+        `query: {gaql: {select, from, where, ...}}`, the way to use config, partition or window values in a query),
+        vendor arguments and engine notes. Without `section`: the section titles; with it: that section's text.
+
+        Args:
+            name: The connector name, as listed by list_connectors.
+            section: A section title (or part of one) from the list of sections.
+        """
+        return connectors.get_connector_guide(name, section)
+
+    @server.tool()
     def get_core_schema(kind: str | None = None, section: str | None = None) -> ToolResult:
         """
         The StreamWright JSON schemas (draft 7). Without arguments: an index of the engines, their schemas and

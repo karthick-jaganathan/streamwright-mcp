@@ -4,8 +4,13 @@ from unittest.mock import patch
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
-from streamwright.mcp.connectors import get_connector_contract, is_valid_connector_name, list_connectors
-from streamwright.mcp.engines import EngineDescriptor, EngineRegistry, source_engine
+from streamwright.mcp.connectors import (
+    get_connector_contract,
+    get_connector_guide,
+    is_valid_connector_name,
+    list_connectors,
+)
+from streamwright.mcp.engines import EngineDescriptor, EngineError, EngineRegistry, source_engine
 
 CATALOG = MappingProxyType({
     "alpha": {"title": "Alpha", "family": "demo", "summary": "an installed one",
@@ -106,3 +111,16 @@ def test_real_installed_connectors_through_the_protocol(call):
     # contract v1.2 §6a: a job engine reaches any source connector through a call step, shown as `call` reach
     assert "DuckDBJob" in listed["mongodb"]["engines"]
     assert listed["mongodb"]["reach"]["DuckDBJob"] == "call"      # mongodb has no native duckdb adapter
+
+
+def test_an_installed_connector_guide_is_paged_by_section(call):
+    sections = call("get_connector_guide", name="postgres")["sections"]
+    assert "Connection" in sections and "Operations" in sections
+    assert call("get_connector_contract", name="postgres")["guide_sections"] == sections
+    connection = call("get_connector_guide", name="postgres", section="connection")
+    assert connection["section"] == "Connection" and "`host`" in connection["text"]
+
+
+def test_a_guide_needs_an_installed_connector():
+    with pytest.raises(EngineError, match="not installed"):
+        get_connector_guide("no_such_connector")

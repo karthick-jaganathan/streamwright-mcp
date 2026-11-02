@@ -4,8 +4,9 @@ import re
 from typing import Any
 
 from streamwright.core import catalog
+from streamwright.core.runtime import components
 
-from streamwright.mcp.engines import SOURCE_KIND, EngineDescriptor, EngineError, EngineRegistry
+from streamwright.mcp.engines import SOURCE_KIND, EngineDescriptor, EngineError, EngineRegistry, paged_guide
 
 _CONNECTOR_NAME = re.compile(r"[a-z][a-z0-9_]{0,62}")
 _INSTALL_COMMAND = "streamwright connectors install {name}"
@@ -87,7 +88,9 @@ def get_connector_contract(registry: EngineRegistry, name: str, engine: str | No
         contracts[descriptor.kind] = description or {
             "error": f"Connector '{name}' is installed but could not be loaded."}
     if contracts:
-        return {"name": name, "installed": True, "engines": contracts}
+        guide = _guide_text(name)
+        sections = {"guide_sections": paged_guide(guide)(None)["sections"]} if guide else {}
+        return {"name": name, "installed": True, "engines": contracts, **sections}
     installed_elsewhere = [d.kind for d in registry if name in {item["name"] for item in d.connectors()}]
     if installed_elsewhere:
         return {"name": name, "installed": True, "engines": {},
@@ -101,3 +104,27 @@ def get_connector_contract(registry: EngineRegistry, name: str, engine: str | No
         entry = None
         result["catalog_error"] = str(exc)
     return {**result, **_install_details(name, entry)}
+
+
+def _guide_text(name: str) -> str | None:
+    try:
+        return components.guide(name)
+    except components.ComponentLoadError:
+        return None
+
+
+def get_connector_guide(name: str, section: str | None = None) -> dict[str, Any]:
+    """
+    The user guide an installed connector ships (examples, query builders, vendor arguments, engine notes, with the
+    tables generated from its definition), paged: without `section` the section titles, otherwise that section.
+    """
+    if not is_valid_connector_name(name):
+        raise EngineError("Invalid connector name: expected lowercase letters, digits and '_', starting with a "
+                          "letter (max 63 characters).")
+    if name not in components.available():
+        raise EngineError(f"Connector '{name}' is not installed; get_connector_contract('{name}') says how to "
+                          "install it.")
+    text = _guide_text(name)
+    if not text:
+        raise EngineError(f"Connector '{name}' ships no guide; get_connector_contract('{name}') has its contract.")
+    return {"name": name, **paged_guide(text)(section)}

@@ -62,6 +62,16 @@ Args:
     name: The connector name, as listed by list_connectors.
     engine: Optional engine filter: an engine kind or key from get_core_schema().
 
+##### `get_connector_guide`
+
+An installed connector's user guide, paged by section: examples, its query builder (e.g. google_ads `gaql`:
+`query: {gaql: {select, from, where, ...}}`, the way to use config, partition or window values in a query),
+vendor arguments and engine notes. Without `section`: the section titles; with it: that section's text.
+
+Args:
+    name: The connector name, as listed by list_connectors.
+    section: A section title (or part of one) from the list of sections.
+
 ##### `get_core_schema`
 
 The StreamWright JSON schemas (draft 7). Without arguments: an index of the engines, their schemas and

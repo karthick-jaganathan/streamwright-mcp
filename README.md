@@ -27,8 +27,8 @@ stdio by default; `--transport sse | streamable-http` needs `--allow-http` and a
 
 ## Tools
 
-`list_connectors` · `get_connector_contract` · `get_core_schema` · `get_engine_guide` · `get_cli_reference` ·
-`validate_source_config` · `inspect_stream_transform` · `validate_duckdb_job` · `validate_spark_job`
+`list_connectors` · `get_connector_contract` · `get_connector_guide` · `get_core_schema` · `get_engine_guide` ·
+`get_cli_reference` · `validate_source_config` · `inspect_stream_transform` · `validate_duckdb_job` · `validate_spark_job`
 
 ## Links
 
