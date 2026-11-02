@@ -8,7 +8,7 @@ By exposing live in-code contracts, core Draft-7 JSON schemas, static validation
 
 ## Architecture & Transports
 
-StreamWright MCP dynamically introspects your active Python environment using standard `streamwright.connectors` entry points. It never relies on stale static YAML copies or fragile local catalogs.
+StreamWright MCP is a thin adapter over the engines' public APIs. It discovers the installed engines from the `streamwright.job_kinds` entry-point group (plus core's `source` engine) and the installed connectors from the engines' connector groups, so it never relies on static copies of schemas, contracts or connector lists. The `streamwright mcp` subcommand is registered through the `streamwright.commands` group.
 
 ### Supported Transports
 
@@ -21,373 +21,119 @@ The server supports three transport modes via the `--transport` CLI flag:
    sw mcp
    ```
 
-2. **`sse` (Server-Sent Events)**: Used for remote or containerized AI agents.
+2. **`sse` (Server-Sent Events)**: Used for remote or containerized AI agents. Requires `--allow-http` and a bearer token (see [Security](#security)).
    ```bash
-   streamwright-mcp --transport sse --port 8000
+   STREAMWRIGHT_MCP_TOKEN=<token> streamwright-mcp --transport sse --allow-http --port 8000
    ```
 
-3. **`streamable-http`**: For streaming HTTP client integrations.
+3. **`streamable-http`**: For streaming HTTP client integrations; same requirements as `sse`.
+
+### Security
+
+- **Workspace roots**: every filesystem path a tool accepts (`source_dir`, `path`, `overlays`) must resolve (symlinks and `..` included) inside the allowed roots: `STREAMWRIGHT_MCP_ROOTS` (separated by `os.pathsep`), default the server's working directory. URIs (`s3://`, `file://`, `http://`) are rejected. Inline `content` is limited to 5 MiB, and YAML errors report only line and column, never file content.
+- **No secret values**: `validate_duckdb_job` takes no secrets; `{{ secrets.NAME }}` references are checked against `spec.secrets`.
+- **HTTP transports** are off unless `--allow-http` is passed. They bind `127.0.0.1` (`--host` to change), validate the `Host`/`Origin` headers (DNS-rebinding protection), and require `Authorization: Bearer <token>` matching `STREAMWRIGHT_MCP_TOKEN`; the server refuses to start without it. The token is a shared secret over plain HTTP: keep the server on loopback or behind a TLS-terminating proxy.
 
 ---
 
-## MCP Tools Reference
+## MCP Tools and Resources Reference
 
-The server registers 6 core tools designed for LLM workflows:
+Generated from the server's registry by `python -m streamwright.mcp.docs`; do not edit between the markers.
 
-### 1. `list_connectors`
+<!-- mcp-reference:start -->
 
-Discovers and lists connectors available in the Python runtime or from the remote StreamWright Hub.
+#### Tools
 
-- **Parameters**:
-  - `include_hub` *(boolean, default: `false`)*: When `true`, queries the remote StreamWright Hub registry to include uninstalled connectors along with their installation hints.
+##### `list_connectors`
 
-- **Example Call**:
-  ```json
-  {
-    "name": "list_connectors",
-    "arguments": {
-      "include_hub": true
-    }
-  }
-  ```
+Lists the installed StreamWright connectors with the engines each supports; nothing is imported.
 
-- **Example Response**:
-  ```json
-  [
-    {
-      "name": "restapi",
-      "title": "REST API Connector",
-      "category": "api",
-      "transport": "http",
-      "version": "0.1.7",
-      "installed": true
-    },
-    {
-      "name": "postgres",
-      "title": "PostgreSQL Connector",
-      "category": "database",
-      "transport": "sql",
-      "version": "0.1.7",
-      "installed": true
-    },
-    {
-      "name": "shopify",
-      "title": "Shopify Connector",
-      "category": "hub",
-      "transport": "unknown",
-      "version": null,
-      "installed": false,
-      "install_hint": "pip install streamwright-shopify"
-    }
-  ]
-  ```
+Args:
+    include_hub: If True, also lists the connectors of the StreamWright Hub catalog that are not installed,
+        with how to install them (ignored with `engine`).
+    engine: Optional engine filter: an engine kind or key from get_core_schema().
 
----
+##### `get_connector_contract`
 
-### 2. `get_connector_contract`
+The contract of a connector for each engine that has an adapter for it: capabilities, authentication and
+secret keys, as the engines declare them. If the connector is not installed: how to install it.
 
-Retrieves the live 5-part contract specification for an individual connector.
+Args:
+    name: The connector name, as listed by list_connectors.
+    engine: Optional engine filter: an engine kind or key from get_core_schema().
 
-- **Parameters**:
-  - `name` *(string, required)*: Connector identifier (e.g. `"restapi"`, `"postgres"`, `"s3"`, `"google_ads"`, `"openai_ads"`).
+##### `get_core_schema`
 
-- **5-Part Contract Return**:
-  1. `source.yaml` specification & parameters.
-  2. `streams/*.yaml` stream schemas and partition options.
-  3. Authentication schemes, required credential fields, and optional parameters.
-  4. DuckDB SQL data shaping, transformations, and types.
-  5. Execution behaviors (pagination, rate limits, retries, concurrency).
+The StreamWright JSON schemas (draft 7). Without arguments: an index of the engines, their schemas and
+sections. With `kind`: that schema. With `kind` and `section`: one definition of it.
 
-- **Example Call**:
-  ```json
-  {
-    "name": "get_connector_contract",
-    "arguments": {
-      "name": "restapi"
-    }
-  }
-  ```
+Args:
+    kind: An engine kind or key, or a schema name from the index. An unknown kind is an error.
+    section: A definition or top-level property of that schema.
 
-- **Example Response (Installed)**:
-  ```json
-  {
-    "name": "restapi",
-    "installed": true,
-    "spec": {
-      "name": "restapi",
-      "title": "REST API Connector",
-      "category": "api",
-      "transport": "http",
-      "package": "streamwright-restapi"
-    },
-    "auth": {
-      "required_fields": ["base_url"],
-      "optional_fields": ["api_key", "bearer_token", "basic_auth", "headers"]
-    },
-    "services": null,
-    "default_service": null,
-    "contract_documentation": "StreamWright REST API Connector specification and examples..."
-  }
-  ```
+##### `get_engine_guide`
 
-- **Example Response (Uninstalled)**:
-  ```json
-  {
-    "name": "salesforce",
-    "installed": false,
-    "message": "Connector 'salesforce' is not installed in the current Python environment.",
-    "install_command": "sw connectors install salesforce",
-    "note": "Connectors are managed through StreamWright Hub (run 'sw connectors install salesforce' or 'sw connectors -i salesforce').",
-    "hub_metadata": {
-      "title": "Salesforce Connector",
-      "install_hint": "sw connectors install salesforce",
-      "note": "Connectors are managed through StreamWright Hub (run 'sw connectors install salesforce' or 'sw connectors -i salesforce')."
-    }
-  }
-  ```
+An engine's guide, paged by section: without `section` the section titles, otherwise that section's text.
 
----
+Args:
+    kind: An engine kind or key from get_core_schema().
+    section: A section title (or part of it).
 
-### 3. `get_core_schema`
+##### `validate_source_config`
 
-Returns the authoritative Draft-7 JSON Schemas and declarative DSL documentation from `streamwright.core.validation.schema`.
+Validates a source (source.yaml and streams/*.yaml) with the same checks as `streamwright validate`: YAML
+structure, keys, credentials, references, installed connectors, SQL transforms and exports, with
+file:line diagnostics. A path that holds a job manifest is validated by that job's engine.
 
-- **Parameters**:
-  - `kind` *(string, default: `"all"`)*:
-    - `"all"`: Returns both schemas plus the full Markdown DSL specification.
-    - `"dsl"`: Returns exclusively the human-readable Markdown DSL specification (~3.7 KB), saving ~90% tokens when JSON schema validation rules are not needed.
-    - `"source"`: Returns JSON Schema for `source.yaml`.
-    - `"stream"`: Returns JSON Schema for `streams/*.yaml`.
-  - `section` *(string, optional)*: Specific sub-definition to extract from the schema (e.g., `"paginator"`, `"auth"`, `"records"`, `"retry"`, `"http_request"`, `"transform"`, `"export"`, `"partitions"`, `"incremental"`). When provided, returns only the focused definition schema to keep LLM context minimal and precise.
+Args:
+    source_dir: A source folder or file, inside the allowed workspace roots (STREAMWRIGHT_MCP_ROOTS, default:
+        the server's working directory).
+    strict: If True, warnings fail the validation (except a connector that is not installed).
 
-- **Example Call (Full DSL Guide)**:
-  ```json
-  {
-    "name": "get_core_schema",
-    "arguments": {
-      "kind": "dsl"
-    }
-  }
-  ```
+##### `inspect_stream_transform`
 
-- **Example Response (`kind: "dsl"`)**:
-  ```json
-  {
-    "version": "1.0.0",
-    "supported_versions": ["1.0.0"],
-    "kind": "dsl",
-    "dsl_specification": "# StreamWright Declarative DSL Specification..."
-  }
-  ```
+Explains one stream as the source engine plans it: its requests, the steps with the tables they read and
+their columns, and the exports with their primary-key check.
 
-- **Example Call (Focused Section)**:
-  ```json
-  {
-    "name": "get_core_schema",
-    "arguments": {
-      "section": "paginator"
-    }
-  }
-  ```
+Args:
+    source_dir: A source folder, inside the allowed workspace roots.
+    stream_name: The stream to inspect.
 
-- **Example Response (`section: "paginator"`)**:
-  ```json
-  {
-    "section": "paginator",
-    "definition": {
-      "type": "object",
-      "required": ["type"],
-      "properties": {
-        "type": {"type": "string", "enum": ["cursor", "offset", "page_number", "next_url"]},
-        "param": {"type": "string"},
-        "token_path": {"type": "string"},
-        "page_size": {"type": "integer"}
-      }
-    }
-  }
-  ```
+##### `get_cli_reference`
 
----
+The live usage and help of the `streamwright` (`sw`) commands, read from the CLI's own parsers.
 
-### 4. `validate_source_config`
+Args:
+    command: Optional command, such as 'run', 'validate' or 'duckdb run'. Without it: the command list.
 
-Performs static validation on a pipeline source folder or file without executing network requests or database connections. Returns exact file:line:column diagnostics.
+##### `validate_<engine>_job`
 
-- **Parameters**:
-  - `source_dir` *(string, required)*: Path to the pipeline source directory (containing `source.yaml` and `streams/*.yaml`).
+One tool per installed job engine (for example `validate_duckdb_job`, `validate_spark_job`), generated from the engine registry.
 
-- **Validation Rules Checked**:
-  - YAML syntax and JSON Schema conformance.
-  - Connector existence and credential requirements.
-  - Jinja expression syntax and parameter references.
-  - DuckDB SQL transform step validity and table lineage.
-  - Export destination configurations.
+Statically validates a <Kind> manifest (<engine title>).
 
-- **Example Call**:
-  ```json
-  {
-    "name": "validate_source_config",
-    "arguments": {
-      "source_dir": "./pipelines/stripe_charges"
-    }
-  }
-  ```
+Offline and credential-free: nothing is connected, and no secret values are accepted. `{{ secrets.NAME }}`
+references are checked against the names declared in spec.secrets. The verdict is the one `streamwright validate`
+gives.
 
-- **Example Response (Pass)**:
-  ```json
-  {
-    "valid": true,
-    "error_count": 0,
-    "warning_count": 0,
-    "errors": [],
-    "warnings": [],
-    "summary": "Validation passed with 0 errors and 0 warnings."
-  }
-  ```
+Args:
+    content: The manifest as YAML text (at most 5 MiB). Give either content or path.
+    path: A manifest or its folder, inside the allowed workspace roots (STREAMWRIGHT_MCP_ROOTS, default: the server's
+        working directory).
+    config: Values for spec.config (not secrets).
+    overlays: Paths of overlay manifests merged in order, inside the allowed workspace roots.
+    strict: If True, warnings fail the validation.
+    analyze: If True, include the execution plan.
 
-- **Example Response (Diagnostics Found)**:
-  ```json
-  {
-    "valid": false,
-    "error_count": 1,
-    "warning_count": 0,
-    "errors": [
-      {
-        "severity": "error",
-        "code": "missing-auth-field",
-        "message": "Required auth field 'api_key' is missing from source.yaml",
-        "file": "./pipelines/stripe_charges/source.yaml",
-        "line": 12,
-        "column": 5,
-        "path": "source.auth"
-      }
-    ],
-    "warnings": [],
-    "summary": "Validation failed with 1 error(s)."
-  }
-  ```
+#### Resources
 
----
+- `streamwright://schema/source`: JSON Schema (draft 7) of the source engine's `source` document.
+- `streamwright://schema/stream`: JSON Schema (draft 7) of the source engine's `stream` document.
+- `streamwright://guide/source`: The section titles of the source engine's guide.
+- `streamwright://guide/source/{section}`: One section of the source engine's guide, found by title.
+- `streamwright://schema/<name>`, `streamwright://guide/<engine>` and `streamwright://guide/<engine>/{section}`: the same for every installed job engine.
 
-### 5. `inspect_stream_transform`
-
-Parses and explains the execution plan, DuckDB SQL transform stages, projected columns, table dependencies, and export targets (including primary key verification) for an individual stream.
-
-- **Parameters**:
-  - `source_dir` *(string, required)*: Path to the source directory.
-  - `stream_name` *(string, required)*: Name of the stream to analyze.
-
-- **Key Diagnostics**:
-  - `projected_columns`: Statically extracted output column names and aliases from each SQL transformation step.
-  - `primary_key_status`: Advisory validation status (`"verified"`, `"unverified (missing in step projections: [...])"`, `"unverified (wildcard SELECT *)"`).
-  - `primary_key_valid`: Boolean flag (`true`, `false`, or `null` for wildcards) alerting AI agents if an export primary key is omitted from its upstream SQL projection.
-
-- **Example Call**:
-  ```json
-  {
-    "name": "inspect_stream_transform",
-    "arguments": {
-      "source_dir": "./pipelines/ecommerce",
-      "stream_name": "orders"
-    }
-  }
-  ```
-
-- **Example Response**:
-  ```json
-  {
-    "found": true,
-    "source_dir": "./pipelines/ecommerce",
-    "stream_name": "orders",
-    "file_path": "./pipelines/ecommerce/streams/orders.yaml",
-    "requests": [
-      {
-        "name": "raw_orders",
-        "path": "/v1/orders",
-        "method": "GET",
-        "paginator": {
-          "type": "cursor",
-          "param": "starting_after"
-        }
-      }
-    ],
-    "transform": {
-      "mode": "page",
-      "steps": [
-        {
-          "name": "flatten_orders",
-          "description": "Extracts order details and timestamps",
-          "select_sql": "SELECT record->>'id' AS order_id, record->>'status' AS status, strptime(record->>'created_at', '%Y-%m-%dT%H:%M:%SZ') AS created_at FROM raw_orders",
-          "inputs": [
-            {
-              "type": "raw_request",
-              "name": "raw_orders"
-            }
-          ],
-          "projected_columns": ["order_id", "status", "created_at"]
-        }
-      ]
-    },
-    "exports": [
-      {
-        "name": "orders",
-        "step": "flatten_orders",
-        "primary_key": ["order_id"],
-        "primary_key_status": "verified",
-        "primary_key_valid": true,
-        "description": "Clean orders exported to destination"
-      }
-    ]
-  }
-  ```
-
----
-
-### 6. `get_cli_reference`
-
-Provides authoritative reference, live inspection guidance, and virtual environment discovery hints for StreamWright CLI commands and the `sw` alias. Rather than returning hardcoded or outdated flags, it instructs the AI agent to inspect live help in the caller's workspace.
-
-- **Parameters**:
-  - `command` *(string, optional)*: Subcommand to inspect (`"run"`, `"validate"`, `"connectors"`, `"mcp"`). Omit to get all commands.
-
-- **Example Call**:
-  ```json
-  {
-    "name": "get_cli_reference",
-    "arguments": {
-      "command": "run"
-    }
-  }
-  ```
-
-- **Example Response**:
-  ```json
-  {
-    "binary": "streamwright",
-    "alias": "sw",
-    "command": "run",
-    "instruction": "To get the most accurate and up-to-date options for 'run', inspect the CLI directly by running or checking: `sw run --help` (or `streamwright run --help`).",
-    "recommended_command": "sw run --help",
-    "fallback_command": "python -m streamwright.core.cli run --help",
-    "environment_hints": [
-      "If 'sw' or 'streamwright' is not found in PATH, check your virtualenv or run: `pyenv which sw` or `which streamwright`",
-      "You can always invoke CLI via python module directly in your active virtual environment: `python -m streamwright.core.cli [command]`"
-    ],
-    "summary": "Executes a pipeline source and exports records to Singer, JSONL, Parquet, DuckDB, or dlt."
-  }
-  ```
-
----
-
-## MCP Resources Reference
-
-For IDEs and clients that support resource attachments:
-
-| URI | MIME Type | Description |
-|---|---|---|
-| `streamwright://schema/source` | `application/json` | Formal Draft-7 JSON Schema for `source.yaml`. |
-| `streamwright://schema/stream` | `application/json` | Formal Draft-7 JSON Schema for `streams/<stream>.yaml`. |
-| `streamwright://schema/core` | `text/markdown` | Full Markdown specification of the StreamWright DSL. |
+<!-- mcp-reference:end -->
 
 ---
 

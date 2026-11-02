@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v7
 
@@ -30,8 +30,15 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install "streamwright>=0.1.6"
-          pip install -e ".[test]"
+          pip install "streamwright>=0.1.8"
+          pip install -e ".[test]" "ruff==0.17.3"
+
+      # Blocking: ruff (ruff.toml) and scripts/check_code_standards.py (vendored from streamwright)
+      - name: Check the code standards
+        run: make lint
+
+      - name: Check the generated tool reference
+        run: python -m streamwright.mcp.docs --check docs/mcp.md
 
       - name: Run test suite
         run: pytest -v

@@ -1,5 +1,13 @@
-"""
-StreamWright Model Context Protocol (MCP) Server.
-"""
+"""Deprecated alias of `streamwright.mcp`, kept for one release."""
 
-__version__ = "0.0.2"
+import warnings
+
+from streamwright.mcp import __version__
+
+warnings.warn(
+    "streamwright_mcp is deprecated and will be removed in the next release; import streamwright.mcp instead",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+__all__ = ["__version__"]

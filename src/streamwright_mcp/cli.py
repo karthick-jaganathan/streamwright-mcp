@@ -1,26 +1,5 @@
-"""
-CLI entry point for StreamWright MCP server.
-"""
+"""Deprecated alias of `streamwright.mcp.cli`."""
 
-import argparse
-import sys
-from streamwright_mcp.server import server
+from streamwright.mcp.cli import build_parser, main
 
-
-def main(argv=None) -> None:
-    parser = argparse.ArgumentParser(
-        description="StreamWright Model Context Protocol (MCP) server."
-    )
-    parser.add_argument(
-        "--transport",
-        choices=["stdio", "sse", "streamable-http"],
-        default="stdio",
-        help="MCP transport protocol (default: stdio)",
-    )
-    args = parser.parse_args(argv)
-
-    server.run(transport=args.transport)
-
-
-if __name__ == "__main__":
-    main()
+__all__ = ["build_parser", "main"]
