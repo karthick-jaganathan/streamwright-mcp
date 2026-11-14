@@ -83,7 +83,9 @@ def test_symlink_escape_is_rejected(call, tmp_path, outside_credentials):
     result = call("validate_duckdb_job", path=str(link / "credentials"))
 
     assert result["valid"] is False
-    assert "outside the allowed workspace roots" in result["errors"][0]["message"]
+    message = result["errors"][0]["message"]
+    assert "outside the allowed workspace roots: " in message and os.path.realpath(tmp_path) in message
+    assert "`content`" in message
 
 
 @pytest.mark.parametrize("uri", ["s3://bucket/job.yaml", "http://example.com/job.yaml", "file:///etc/passwd"])

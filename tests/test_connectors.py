@@ -27,7 +27,7 @@ from streamwright.mcp.connectors import (
     is_valid_connector_name,
     list_connectors,
 )
-from streamwright.mcp.engines import EngineDescriptor, EngineError, EngineRegistry, source_engine
+from streamwright.mcp.engines import EngineDescriptor, EngineError, EngineRegistry, source_engine, split_sections
 
 CATALOG = MappingProxyType({
     "alpha": {"title": "Alpha", "family": "demo", "summary": "an installed one",
@@ -136,6 +136,15 @@ def test_an_installed_connector_guide_is_paged_by_section(call):
     assert call("get_connector_contract", name="postgres")["guide_sections"] == sections
     connection = call("get_connector_guide", name="postgres", section="connection")
     assert connection["section"] == "Connection" and "`host`" in connection["text"]
+    assert call("get_connector_contract", name="postgres")["driver"]["modules"] == ["psycopg", "psycopg2"]
+
+
+def test_a_guide_section_includes_its_subsections():
+    text = "# T\n\n## Connection\n\n### Keys\n\nk\n\n### Auth\n\na\n\n## Engines\n\ne\n"
+    sections = split_sections(text)
+    assert list(sections) == ["Connection", "Keys", "Auth", "Engines"]
+    assert sections["Connection"] == "## Connection\n\n### Keys\n\nk\n\n### Auth\n\na"
+    assert sections["Keys"] == "### Keys\n\nk"
 
 
 def test_a_guide_needs_an_installed_connector():

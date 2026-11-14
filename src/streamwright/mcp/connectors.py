@@ -21,6 +21,7 @@ import re
 from typing import Any
 
 from streamwright.core import catalog
+from streamwright.core.jobs.state.url import DRIVERS, missing_driver
 from streamwright.core.runtime import components
 
 from streamwright.mcp.engines import SOURCE_KIND, EngineDescriptor, EngineError, EngineRegistry, paged_guide
@@ -82,6 +83,16 @@ def list_connectors(registry: EngineRegistry, include_hub: bool = False,
     return [found[name] for name in sorted(found)]
 
 
+def _drivers(name: str) -> dict[str, Any]:
+    """The DB-API driver a database lookup on this connector's connections needs, and whether it is installed."""
+    if name not in DRIVERS:
+        return {}
+    modules, install = DRIVERS[name]
+    ready = missing_driver(name) is None
+    return {"driver": {"modules": list(modules), "installed": ready, "needed_by": "database lookups (spec.lookups "
+                       "type: database)", **({} if ready else {"install": install})}}
+
+
 def get_connector_contract(registry: EngineRegistry, name: str, engine: str | None = None) -> dict[str, Any]:
     """
     The contract of connector `name` for each engine that has an adapter for it, as the engines declare it
@@ -107,7 +118,7 @@ def get_connector_contract(registry: EngineRegistry, name: str, engine: str | No
     if contracts:
         guide = _guide_text(name)
         sections = {"guide_sections": paged_guide(guide)(None)["sections"]} if guide else {}
-        return {"name": name, "installed": True, "engines": contracts, **sections}
+        return {"name": name, "installed": True, **_drivers(name), "engines": contracts, **sections}
     installed_elsewhere = [d.kind for d in registry if name in {item["name"] for item in d.connectors()}]
     if installed_elsewhere:
         return {"name": name, "installed": True, "engines": {},

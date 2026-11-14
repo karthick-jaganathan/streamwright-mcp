@@ -59,7 +59,9 @@ def resolve_workspace_path(path: str, parameter: str = "path") -> str:
     for root in allowed_roots():
         if resolved == root or resolved.startswith(root + os.sep):
             return resolved
-    raise WorkspaceError(f"'{parameter}' is outside the allowed workspace roots ({ROOTS_ENV}).")
+    raise WorkspaceError(f"'{parameter}' is outside the allowed workspace roots: {', '.join(allowed_roots())} (add "
+                         f"more with {ROOTS_ENV}, {os.pathsep}-separated). Tools that take `content` check a "
+                         "manifest's text instead of a path.")
 
 
 def check_content_size(content: str, parameter: str = "content") -> None:

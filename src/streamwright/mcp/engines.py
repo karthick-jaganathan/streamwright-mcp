@@ -40,7 +40,7 @@ from streamwright.core.validation.engine import check_components, is_valid, vali
 from streamwright.mcp.report import Report
 
 SOURCE_KIND = "source"
-_HEADING = re.compile(r"^#{2,3} +(.+?) *$", re.MULTILINE)
+_HEADING = re.compile(r"^(#{2,3}) +(.+?) *$", re.MULTILINE)
 
 
 class EngineError(ToolError, ResourceError):
@@ -104,12 +104,13 @@ class EngineRegistry:
 
 
 def split_sections(text: str) -> dict[str, str]:
-    """A markdown document by heading: {heading: text of the section}."""
+    """A markdown document by heading: {heading: text of the section}; a `##` section includes its `###` ones."""
     matches = list(_HEADING.finditer(text))
     sections = {}
     for position, match in enumerate(matches):
-        end = matches[position + 1].start() if position + 1 < len(matches) else len(text)
-        sections[match.group(1)] = text[match.start():end].strip()
+        level = len(match.group(1))
+        end = next((later.start() for later in matches[position + 1:] if len(later.group(1)) <= level), len(text))
+        sections[match.group(2)] = text[match.start():end].strip()
     return sections
 
 
