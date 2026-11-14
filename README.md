@@ -23,7 +23,9 @@ pip install streamwright-mcp
 }
 ```
 
-stdio by default; `--transport sse | streamable-http` needs `--allow-http` and a token in `STREAMWRIGHT_MCP_TOKEN`.
+stdio by default; `--transport sse | streamable-http` needs `--allow-http` and a token in `STREAMWRIGHT_MCP_TOKEN`
+(`--host`/`--port` only apply to them). `--root DIR` (repeatable) sets the folders the tools may read manifests from
+(default `STREAMWRIGHT_MCP_ROOTS`, else the working directory).
 
 ## Tools
 

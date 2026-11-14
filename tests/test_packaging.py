@@ -1,5 +1,23 @@
+#!/usr/bin/env python
+# /*************************************************************************
+# * Copyright 2026 Karthick Jaganathan
+# *
+# * Licensed under the Apache License, Version 2.0 (the "License");
+# * you may not use this file except in compliance with the License.
+# * You may obtain a copy of the License at
+# *
+# * https://www.apache.org/licenses/LICENSE-2.0
+# *
+# * Unless required by applicable law or agreed to in writing, software
+# * distributed under the License is distributed on an "AS IS" BASIS,
+# * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# * See the License for the specific language governing permissions and
+# * limitations under the License.
+# **************************************************************************/
+
 import argparse
 import importlib
+import os
 import re
 import sys
 from pathlib import Path
@@ -8,6 +26,7 @@ import pytest
 from streamwright.core.runtime import plugins
 
 from streamwright.mcp import cli, docs
+from streamwright.mcp.workspace import ROOTS_ENV
 
 ROOT = Path(__file__).parent.parent
 
@@ -74,3 +93,20 @@ def test_generated_tool_reference_is_current():
     text = (ROOT / "docs/mcp.md").read_text(encoding="utf-8")  # the full reference; README.md stays a short summary
     assert docs.replace_block(text, block) == text, "out of date: python -m streamwright.mcp.docs docs/mcp.md"
     assert re.search(r"##### `validate_source_config`", block)
+
+
+def test_http_options_are_refused_with_stdio(capsys):
+    for argv in (["--port", "9001"], ["--host", "0.0.0.0"], ["--allow-http"]):
+        with pytest.raises(SystemExit) as usage:
+            cli.main(argv)
+        assert usage.value.code == 2
+    assert "--allow-http only applies to the sse and streamable-http transports" in capsys.readouterr().err
+
+
+def test_root_sets_the_workspace_roots(tmp_path, monkeypatch):
+    monkeypatch.delenv(ROOTS_ENV, raising=False)
+    with pytest.raises(SystemExit):
+        cli.main(["--root", str(tmp_path / "missing")])
+    monkeypatch.setattr("streamwright.mcp.server.server.run", lambda transport: None)
+    assert cli.main(["--root", str(tmp_path), "--root", "."]) == 0
+    assert os.environ[ROOTS_ENV].split(os.pathsep) == [str(tmp_path), os.path.abspath(".")]

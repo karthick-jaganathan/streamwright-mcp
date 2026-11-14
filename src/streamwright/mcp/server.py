@@ -1,3 +1,20 @@
+#!/usr/bin/env python
+# /*************************************************************************
+# * Copyright 2026 Karthick Jaganathan
+# *
+# * Licensed under the Apache License, Version 2.0 (the "License");
+# * you may not use this file except in compliance with the License.
+# * You may obtain a copy of the License at
+# *
+# * https://www.apache.org/licenses/LICENSE-2.0
+# *
+# * Unless required by applicable law or agreed to in writing, software
+# * distributed under the License is distributed on an "AS IS" BASIS,
+# * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# * See the License for the specific language governing permissions and
+# * limitations under the License.
+# **************************************************************************/
+
 """
 StreamWright Model Context Protocol (MCP) server.
 
@@ -29,7 +46,8 @@ Args:
     content: The manifest as YAML text (at most 5 MiB). Give either content or path.
     path: A manifest or its folder, inside the allowed workspace roots (STREAMWRIGHT_MCP_ROOTS, default: the server's
         working directory).
-    config: Values for spec.config (not secrets).
+    config: Values for spec.config (not secrets); they render references such as runtime.state.scope
+        (`client:{{{{ config.client }}}}`) and lock.each lists, as `--set` does on the command line.
     overlays: Paths of overlay manifests merged in order, inside the allowed workspace roots.
     strict: If True, warnings fail the validation.
     analyze: If True, include the execution plan."""
@@ -131,6 +149,13 @@ def build_server(registry: EngineRegistry) -> MCPServer:
     def get_engine_guide(kind: str, section: str | None = None) -> ToolResult:
         """
         An engine's guide, paged by section: without `section` the section titles, otherwise that section's text.
+        For example the DuckDBJob section "State, scopes and locks": running one job for many clients
+        (runtime.state.scope), keeping two runs off a shared item (runtime.state.lock with each/as/token and the
+        fail, wait or prune policy), the section "Lookups and accounts" (credentials looked up at run time from a
+        database, a command, a Python function or AWS Secrets Manager; runtime.fan_out runs the job once per
+        account), what a run does with a failed batch (runtime.state.failed_job_policy: abandon,
+        the default, retry up to max_job_attempts, or block), retrying or abandoning it by hand, and applying the
+        state tables' migrations (a run only checks them: `state migrate` first, or --apply-state-migrations).
 
         Args:
             kind: An engine kind or key from get_core_schema().
@@ -167,10 +192,14 @@ def build_server(registry: EngineRegistry) -> MCPServer:
     @server.tool()
     def get_cli_reference(command: str | None = None) -> ToolResult:
         """
-        The live usage and help of the `streamwright` (`sw`) commands, read from the CLI's own parsers.
+        The live usage and help of the `streamwright` (`sw`) commands, read from the CLI's own parsers: every
+        option with its meaning, and the subcommands of a command.
 
         Args:
-            command: Optional command, such as 'run', 'validate' or 'duckdb run'. Without it: the command list.
+            command: Optional command, such as 'run', 'validate', 'duckdb run' (with --state-lock-policy,
+                --failed-job-policy, --max-job-attempts, --apply-state-migrations, --allow-lookup-exec), 'duckdb state'
+                (migrate, check, list, show, retry, abandon), 'state migrate' or 'spark run'. Without it: the command
+                list and the options every job command takes.
         """
         return cli_reference.get_cli_reference(command)
 

@@ -30,7 +30,7 @@ The server supports three transport modes via the `--transport` CLI flag:
 
 ### Security
 
-- **Workspace roots**: every filesystem path a tool accepts (`source_dir`, `path`, `overlays`) must resolve (symlinks and `..` included) inside the allowed roots: `STREAMWRIGHT_MCP_ROOTS` (separated by `os.pathsep`), default the server's working directory. URIs (`s3://`, `file://`, `http://`) are rejected. Inline `content` is limited to 5 MiB, and YAML errors report only line and column, never file content.
+- **Workspace roots** (`--root DIR`, repeatable, or `STREAMWRIGHT_MCP_ROOTS`): every filesystem path a tool accepts (`source_dir`, `path`, `overlays`) must resolve (symlinks and `..` included) inside the allowed roots: `STREAMWRIGHT_MCP_ROOTS` (separated by `os.pathsep`), default the server's working directory. URIs (`s3://`, `file://`, `http://`) are rejected. Inline `content` is limited to 5 MiB, and YAML errors report only line and column, never file content.
 - **No secret values**: `validate_duckdb_job` takes no secrets; `{{ secrets.NAME }}` references are checked against `spec.secrets`.
 - **HTTP transports** are off unless `--allow-http` is passed. They bind `127.0.0.1` (`--host` to change), validate the `Host`/`Origin` headers (DNS-rebinding protection), and require `Authorization: Bearer <token>` matching `STREAMWRIGHT_MCP_TOKEN`; the server refuses to start without it. The token is a shared secret over plain HTTP: keep the server on loopback or behind a TLS-terminating proxy.
 
@@ -84,6 +84,13 @@ Args:
 ##### `get_engine_guide`
 
 An engine's guide, paged by section: without `section` the section titles, otherwise that section's text.
+For example the DuckDBJob section "State, scopes and locks": running one job for many clients
+(runtime.state.scope), keeping two runs off a shared item (runtime.state.lock with each/as/token and the
+fail, wait or prune policy), the section "Lookups and accounts" (credentials looked up at run time from a
+database, a command, a Python function or AWS Secrets Manager; runtime.fan_out runs the job once per
+account), what a run does with a failed batch (runtime.state.failed_job_policy: abandon,
+the default, retry up to max_job_attempts, or block), retrying or abandoning it by hand, and applying the
+state tables' migrations (a run only checks them: `state migrate` first, or --apply-state-migrations).
 
 Args:
     kind: An engine kind or key from get_core_schema().
@@ -111,10 +118,14 @@ Args:
 
 ##### `get_cli_reference`
 
-The live usage and help of the `streamwright` (`sw`) commands, read from the CLI's own parsers.
+The live usage and help of the `streamwright` (`sw`) commands, read from the CLI's own parsers: every
+option with its meaning, and the subcommands of a command.
 
 Args:
-    command: Optional command, such as 'run', 'validate' or 'duckdb run'. Without it: the command list.
+    command: Optional command, such as 'run', 'validate', 'duckdb run' (with --state-lock-policy,
+        --failed-job-policy, --max-job-attempts, --apply-state-migrations, --allow-lookup-exec), 'duckdb state'
+        (migrate, check, list, show, retry, abandon), 'state migrate' or 'spark run'. Without it: the command
+        list and the options every job command takes.
 
 ##### `validate_<engine>_job`
 
@@ -130,7 +141,8 @@ Args:
     content: The manifest as YAML text (at most 5 MiB). Give either content or path.
     path: A manifest or its folder, inside the allowed workspace roots (STREAMWRIGHT_MCP_ROOTS, default: the server's
         working directory).
-    config: Values for spec.config (not secrets).
+    config: Values for spec.config (not secrets); they render references such as runtime.state.scope
+        (`client:{{ config.client }}`) and lock.each lists, as `--set` does on the command line.
     overlays: Paths of overlay manifests merged in order, inside the allowed workspace roots.
     strict: If True, warnings fail the validation.
     analyze: If True, include the execution plan.
