@@ -46,10 +46,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install "streamwright~=0.1.11"
-          # the protocol tests read real connector definitions (postgres, mongodb) from the core release tag
+          # core and the connector definitions the protocol tests read (postgres, mongodb) come from the core
+          # release tag, so CI passes before that release reaches PyPI
+          core="git+https://github.com/karthick-jaganathan/streamwright.git@v0.1.14"
+          pip install "streamwright @ $core#subdirectory=core"
           for c in postgres mongodb; do
-            pip install --no-deps "git+https://github.com/karthick-jaganathan/streamwright.git@v0.1.11#subdirectory=connectors/readers/$c"
+            pip install --no-deps "$core#subdirectory=connectors/readers/$c"
           done
           pip install -e ".[test]" "ruff==0.17.3"
 
