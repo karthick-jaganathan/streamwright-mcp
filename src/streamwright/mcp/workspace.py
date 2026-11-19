@@ -25,6 +25,8 @@ workspace roots.
 import os
 import re
 
+from streamwright.core.config.loader import SourceFilesError, find_source
+
 ROOTS_ENV = "STREAMWRIGHT_MCP_ROOTS"
 MAX_CONTENT_BYTES = 5 * 1024 * 1024  # the core job loader's limit
 
@@ -56,12 +58,34 @@ def resolve_workspace_path(path: str, parameter: str = "path") -> str:
     if _URI_SCHEME.match(path):
         raise WorkspaceError(f"'{parameter}' must be a local filesystem path, not a URI.")
     resolved = os.path.realpath(os.path.expanduser(path))
-    for root in allowed_roots():
-        if resolved == root or resolved.startswith(root + os.sep):
-            return resolved
+    if _inside_roots(resolved):
+        return resolved
     raise WorkspaceError(f"'{parameter}' is outside the allowed workspace roots: {', '.join(allowed_roots())} (add "
                          f"more with {ROOTS_ENV}, {os.pathsep}-separated). Tools that take `content` check a "
                          "manifest's text instead of a path.")
+
+
+def _inside_roots(resolved: str) -> bool:
+    return any(resolved == root or resolved.startswith(root + os.sep) for root in allowed_roots())
+
+
+def confine_source(path: str, parameter: str = "source_dir") -> None:
+    """
+    Checks every file the source at `path` (a confined real path) is read from: its source folder (which the loader
+    finds by climbing from a `streams/` folder or stream file), its source.yaml and each stream file must resolve
+    inside the allowed roots too, so a symlinked stream file cannot read a file outside them.
+
+    Raises:
+        WorkspaceError: naming the first file that resolves outside the roots (not where it leads).
+    """
+    try:
+        layout = find_source(path)
+    except SourceFilesError:
+        return                              # nothing to read: the engine's validation says why
+    for file in (layout.folder, *layout.files):
+        if file is not None and not _inside_roots(os.path.realpath(file)):
+            raise WorkspaceError(f"'{parameter}': the source reads {file}, which resolves outside the allowed "
+                                 f"workspace roots: {', '.join(allowed_roots())}.")
 
 
 def check_content_size(content: str, parameter: str = "content") -> None:

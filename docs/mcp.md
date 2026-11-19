@@ -30,7 +30,7 @@ The server supports three transport modes via the `--transport` CLI flag:
 
 ### Security
 
-- **Workspace roots** (`--root DIR`, repeatable, or `STREAMWRIGHT_MCP_ROOTS`): every filesystem path a tool accepts (`source_dir`, `path`, `overlays`) must resolve (symlinks and `..` included) inside the allowed roots: `STREAMWRIGHT_MCP_ROOTS` (separated by `os.pathsep`), default the server's working directory. URIs (`s3://`, `file://`, `http://`) are rejected. Inline `content` is limited to 5 MiB, and YAML errors report only line and column, never file content.
+- **Workspace roots** (`--root DIR`, repeatable, or `STREAMWRIGHT_MCP_ROOTS`): every filesystem path a tool accepts (`source_dir`, `path`, `overlays`) must resolve (symlinks and `..` included) inside the allowed roots: `STREAMWRIGHT_MCP_ROOTS` (separated by `os.pathsep`), default the server's working directory. A source is checked file by file before it is read: its source folder (also when found from a `streams/` folder or stream file), its `source.yaml` and every stream file must resolve inside the roots too, so a symlinked stream file cannot lead outside them. URIs (`s3://`, `file://`, `http://`) are rejected. Inline `content` is limited to 5 MiB, and YAML errors report only line and column, never file content.
 - **No secret values**: `validate_duckdb_job` takes no secrets; `{{ secrets.NAME }}` references are checked against `spec.secrets`.
 - **HTTP transports** are off unless `--allow-http` is passed. They bind `127.0.0.1` (`--host` to change), validate the `Host`/`Origin` headers (DNS-rebinding protection), and require `Authorization: Bearer <token>` matching `STREAMWRIGHT_MCP_TOKEN`; the server refuses to start without it. The token is a shared secret over plain HTTP: keep the server on loopback or behind a TLS-terminating proxy.
 
@@ -55,12 +55,16 @@ Args:
 
 ##### `get_connector_contract`
 
-The contract of a connector for each engine that has an adapter for it: capabilities, authentication and
-secret keys, as the engines declare them. If the connector is not installed: how to install it.
+The contract of a connector as the engines declare it: connection, authentication and secret keys,
+operations and query builders once, then under `engines` only what differs per engine (capabilities,
+transport, reach). Operations are summarised (kind, idempotent, max_chunk, actions, argument names and the
+required ones); `operation` returns one in full. If the connector is not installed: how to install it.
 
 Args:
     name: The connector name, as listed by list_connectors.
     engine: Optional engine filter: an engine kind or key from get_core_schema().
+    operation: Optional operation name from the summary (e.g. `Service.method`, any case): that operation
+        with every declared field, argument types and descriptions included.
 
 ##### `get_connector_guide`
 
@@ -75,11 +79,13 @@ Args:
 ##### `get_core_schema`
 
 The StreamWright JSON schemas (draft 7). Without arguments: an index of the engines, their schemas and
-sections. With `kind`: that schema. With `kind` and `section`: one definition of it.
+sections. With `kind`: an outline of that schema (top-level properties with type, description and fields;
+definitions with description). With `kind` and `section`: that part in full.
 
 Args:
     kind: An engine kind or key, or a schema name from the index. An unknown kind is an error.
-    section: A definition or top-level property of that schema.
+    section: A definition or top-level property, or a dotted path through properties such as
+        `steps.sql` or `runtime.state`.
 
 ##### `get_engine_guide`
 
@@ -115,6 +121,15 @@ their columns, and the exports with their primary-key check.
 Args:
     source_dir: A source folder, inside the allowed workspace roots.
     stream_name: The stream to inspect.
+
+##### `search_docs`
+
+Searches the shipped guides (every engine's and installed connector's) and the CLI help by keywords and
+identifiers (`snake_case` or dotted names match whole): the 10 best sections, each with a snippet and the
+tool call that opens it.
+
+Args:
+    query: Words or identifiers to look for.
 
 ##### `get_cli_reference`
 

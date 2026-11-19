@@ -28,6 +28,10 @@ from streamwright.mcp.engines import SOURCE_KIND, EngineDescriptor, EngineError,
 
 _CONNECTOR_NAME = re.compile(r"[a-z][a-z0-9_]{0,62}")
 _INSTALL_COMMAND = "streamwright connectors install {name}"
+_NESTED_DEFINITION = "definition"   # a job engine's contract may nest the connector definition under this key
+_OPERATION_SUMMARY = ("name", "kind", "idempotent", "max_chunk", "actions")
+_OPERATION_HINT = ("operations are summarised (argument names, `required` marks the required ones); "
+                   "get_connector_contract(name='{name}', operation='<operation name>') returns one in full")
 
 
 def is_valid_connector_name(name: Any) -> bool:
@@ -93,17 +97,84 @@ def _drivers(name: str) -> dict[str, Any]:
                        "type: database)", **({} if ready else {"install": install})}}
 
 
-def get_connector_contract(registry: EngineRegistry, name: str, engine: str | None = None) -> dict[str, Any]:
+def _lean(field: Any) -> Any:
+    """A declared field (a connection key, an argument) without its empty attributes: None, "", [] and {} go;
+    false and 0 stay."""
+    if not isinstance(field, dict):
+        return field
+    return {key: value for key, value in field.items() if value is not None and value not in ("", [], {})}
+
+
+def _lean_fields(contract: dict[str, Any]) -> dict[str, Any]:
+    """The contract with its connection keys' and operations' arguments' empty attributes left out."""
+    lean = dict(contract)
+    if isinstance(lean.get("connection"), dict):
+        lean["connection"] = {name: _lean(field) for name, field in lean["connection"].items()}
+    if isinstance(lean.get("operation"), dict) and isinstance(lean["operation"].get("arguments"), list):
+        lean["operation"] = {**_lean(lean["operation"]),
+                             "arguments": [_lean(argument) for argument in lean["operation"]["arguments"]]}
+    return lean
+
+
+def _compact_operation(operation: dict[str, Any]) -> dict[str, Any]:
+    compact = {key: operation[key] for key in _OPERATION_SUMMARY if key in operation}
+    if operation.get("destructive_actions"):
+        compact["destructive_actions"] = operation["destructive_actions"]
+    arguments = operation.get("arguments") or []
+    compact["arguments"] = [argument.get("name") for argument in arguments]
+    compact["required"] = [argument.get("name") for argument in arguments if argument.get("required")]
+    return compact
+
+
+def _flatten(contract: dict[str, Any]) -> dict[str, Any]:
+    """An engine's contract as one mapping: the definition it nests (if any) under its own keys."""
+    nested = contract.get(_NESTED_DEFINITION)
+    if not isinstance(nested, dict):
+        return contract
+    return {**nested, **{key: value for key, value in contract.items() if key != _NESTED_DEFINITION}}
+
+
+def _split_shared(contracts: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    """The keys every engine declares with the same value, once; and per engine, only what differs."""
+    flat = {kind: _flatten(contract) for kind, contract in contracts.items()}
+    first = next(iter(flat.values()))
+    shared = {key: value for key, value in first.items()
+              if all(key in other and other[key] == value for other in flat.values())}
+    differing = {kind: {key: value for key, value in contract.items() if key not in shared}
+                 for kind, contract in flat.items()}
+    return shared, differing
+
+
+def _with_compact_operations(contract: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(contract.get("operations"), list):
+        return contract
+    return {**contract, "operations": [_compact_operation(item) for item in contract["operations"]]}
+
+
+def _one_operation(name: str, contracts: list[dict[str, Any]], wanted: str) -> dict[str, Any]:
+    names: list[str] = []
+    for contract in contracts:
+        for operation in contract.get("operations") or []:
+            if str(operation.get("name", "")).lower() == wanted.strip().lower():
+                return {"name": name, "installed": True, "operation": operation}
+            names.append(operation.get("name"))
+    raise EngineError(f"Connector '{name}' has no operation '{wanted}'; operations: "
+                      f"{', '.join(dict.fromkeys(names)) or 'none'}.")
+
+
+def get_connector_contract(registry: EngineRegistry, name: str, engine: str | None = None,
+                           operation: str | None = None) -> dict[str, Any]:
     """
-    The contract of connector `name` for each engine that has an adapter for it, as the engines declare it
-    (nothing is connected). When it is not installed: how to install it.
+    The contract of connector `name` as the engines declare it (nothing is connected): what all its engines share
+    once, then under `engines` only what differs per engine, with operations summarised; with `operation`, that
+    operation in full. When it is not installed: how to install it.
     """
     if not is_valid_connector_name(name):
         raise EngineError("Invalid connector name: expected lowercase letters, digits and '_', starting with a "
                           "letter (max 63 characters).")
-    engines = _select_engines(registry, engine)
+    wanted = _select_engines(registry, engine)[0].kind if engine else None
     contracts: dict[str, Any] = {}
-    for descriptor in engines:
+    for descriptor in registry:
         reach = {item["name"]: item.get("support", "native") for item in descriptor.connectors()}
         if name not in reach:
             continue
@@ -115,15 +186,21 @@ def get_connector_contract(registry: EngineRegistry, name: str, engine: str | No
         description = descriptor.describe_connector(name)
         contracts[descriptor.kind] = description or {
             "error": f"Connector '{name}' is installed but could not be loaded."}
-    if contracts:
-        guide = _guide_text(name)
+    selected = [kind for kind in contracts if wanted in (None, kind)]
+    if selected:
+        shared, differing = _split_shared(contracts)
+        if operation is not None:
+            return _lean_fields(_one_operation(name, [shared, *differing.values()], operation))
+        guide = guide_text(name)
         sections = {"guide_sections": paged_guide(guide)(None)["sections"]} if guide else {}
-        return {"name": name, "installed": True, **_drivers(name), "engines": contracts, **sections}
-    installed_elsewhere = [d.kind for d in registry if name in {item["name"] for item in d.connectors()}]
-    if installed_elsewhere:
+        engines = {kind: _with_compact_operations(differing[kind]) for kind in selected}
+        shared = {key: value for key, value in _with_compact_operations(shared).items() if key != "engines"}
+        return _lean_fields({**shared, "name": name, "installed": True, **_drivers(name),
+                             "engines": engines, **sections, "operation_hint": _OPERATION_HINT.format(name=name)})
+    if contracts:
         return {"name": name, "installed": True, "engines": {},
                 "message": f"Connector '{name}' ships no adapter for {engine}; it supports: "
-                           f"{', '.join(installed_elsewhere)}."}
+                           f"{', '.join(contracts)}."}
     result = {"name": name, "installed": False,
               "message": f"Connector '{name}' is not installed in the current Python environment."}
     try:
@@ -134,7 +211,7 @@ def get_connector_contract(registry: EngineRegistry, name: str, engine: str | No
     return {**result, **_install_details(name, entry)}
 
 
-def _guide_text(name: str) -> str | None:
+def guide_text(name: str) -> str | None:
     try:
         return components.guide(name)
     except components.ComponentLoadError:
@@ -152,7 +229,7 @@ def get_connector_guide(name: str, section: str | None = None) -> dict[str, Any]
     if name not in components.available():
         raise EngineError(f"Connector '{name}' is not installed; get_connector_contract('{name}') says how to "
                           "install it.")
-    text = _guide_text(name)
+    text = guide_text(name)
     if not text:
         raise EngineError(f"Connector '{name}' ships no guide; get_connector_contract('{name}') has its contract.")
     return {"name": name, **paged_guide(text)(section)}

@@ -122,9 +122,10 @@ def paged_guide(text: str) -> Callable[[str | None], dict[str, Any]]:
         if not section:
             return {"sections": list(sections)}
         wanted = section.strip().lower()
-        for title, body in sections.items():
-            if wanted in title.lower():
-                return {"section": title, "text": body}
+        titles = [title for title in sections if title.lower() == wanted] or [
+            title for title in sections if wanted in title.lower()]
+        if titles:
+            return {"section": titles[0], "text": sections[titles[0]]}
         raise EngineError(f"unknown guide section '{section}'; sections: {', '.join(sections)}")
 
     return guide

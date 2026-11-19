@@ -15,11 +15,15 @@
 # * limitations under the License.
 # **************************************************************************/
 
+import functools
+import json
 from types import MappingProxyType
 from unittest.mock import patch
 
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
+from streamwright.core.runtime import components
+from streamwright.core.runtime.definitions import engine_connectors
 
 from streamwright.mcp.connectors import (
     get_connector_contract,
@@ -27,7 +31,15 @@ from streamwright.mcp.connectors import (
     is_valid_connector_name,
     list_connectors,
 )
-from streamwright.mcp.engines import EngineDescriptor, EngineError, EngineRegistry, source_engine, split_sections
+from streamwright.mcp.engines import (
+    EngineDescriptor,
+    EngineError,
+    EngineRegistry,
+    discover_engines,
+    source_engine,
+    split_sections,
+)
+from streamwright.mcp.server import MAX_RESULT_CHARS
 
 CATALOG = MappingProxyType({
     "alpha": {"title": "Alpha", "family": "demo", "summary": "an installed one",
@@ -78,7 +90,8 @@ def test_the_catalog_adds_install_hints_for_connectors_that_are_not_installed(re
 def test_contract_comes_from_each_engine_that_has_the_connector(registry):
     contract = get_connector_contract(registry, "gamma")
 
-    assert contract == {"name": "gamma", "installed": True, "engines": {"FakeJob": {"name": "gamma"}}}
+    assert contract["name"] == "gamma" and contract["installed"] is True
+    assert contract["engines"] == {"FakeJob": {}}           # one engine: everything it declares is shared
 
 
 def test_contract_for_an_engine_without_an_adapter(registry):
@@ -122,7 +135,7 @@ def test_real_installed_connectors_through_the_protocol(call):
     contract = call("get_connector_contract", name="postgres")
 
     assert contract["installed"] is True
-    assert contract["engines"]["DuckDBJob"]["secret_keys"] == ["dsn", "password"]
+    assert {**contract, **contract["engines"]["DuckDBJob"]}["secret_keys"] == ["dsn", "password"]
     listed = {item["name"]: item for item in call("list_connectors")}
     assert {"source", "DuckDBJob"} <= set(listed["postgres"]["engines"])
     # contract v1.2 §6a: a job engine reaches any source connector through a call step, shown as `call` reach
@@ -150,3 +163,54 @@ def test_a_guide_section_includes_its_subsections():
 def test_a_guide_needs_an_installed_connector():
     with pytest.raises(EngineError, match="not installed"):
         get_connector_guide("no_such_connector")
+
+
+INSTALLED = sorted(components.available())
+
+
+@pytest.fixture(scope="module")
+def real_registry():
+    """The installed engines, with the connector lists read once (core reads its entry points on every call)."""
+    cached = functools.lru_cache(maxsize=None)(engine_connectors)
+    with patch("streamwright.mcp.engines.engine_connectors", side_effect=cached):
+        yield discover_engines()
+
+
+def _operations(contract):
+    return [*contract.get("operations", []), *(op for entry in contract["engines"].values()
+                                               for op in entry.get("operations", []))]
+
+
+@pytest.mark.parametrize("name", INSTALLED)
+def test_a_default_contract_is_small_and_says_each_thing_once(call, real_registry, name):
+    contract = call("get_connector_contract", name=name)
+
+    assert len(json.dumps(contract)) <= MAX_RESULT_CHARS and "truncated" not in contract
+    assert "operation=" in contract["operation_hint"]
+    for entry in contract["engines"].values():
+        assert "operations" not in entry or "operations" not in contract
+        assert not [key for key, value in entry.items() if key in contract and contract[key] == value]
+    for operation in _operations(contract):
+        assert {"name", "arguments", "required"} <= set(operation) and set(operation["required"]) <= set(
+            operation["arguments"])
+
+
+@pytest.mark.parametrize("name", INSTALLED)
+def test_every_summarised_operation_is_available_in_full(real_registry, name):
+    summary = get_connector_contract(real_registry, name)
+    names = [operation["name"] for operation in _operations(summary)]
+
+    for operation in _operations(summary):
+        full = get_connector_contract(real_registry, name, operation=operation["name"].upper())["operation"]
+        assert full["name"] == operation["name"]
+        assert [argument["name"] for argument in full.get("arguments", [])] == operation["arguments"]
+    with pytest.raises(EngineError, match=r"has no operation 'no\.such_operation'; operations: ") as error:
+        get_connector_contract(real_registry, name, operation="no.such_operation")
+    assert all(item in str(error.value) for item in names)
+
+
+def test_the_engine_filter_keeps_one_engine_of_the_contract(real_registry):
+    name = INSTALLED[0]
+    kinds = list(get_connector_contract(real_registry, name)["engines"])
+
+    assert list(get_connector_contract(real_registry, name, engine=kinds[-1])["engines"]) == [kinds[-1]]

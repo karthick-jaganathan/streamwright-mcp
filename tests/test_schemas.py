@@ -23,7 +23,7 @@ from mcp.server.mcpserver.exceptions import ResourceError, ToolError
 
 from streamwright.mcp.engines import discover_engines
 from streamwright.mcp.schemas import get_core_schema, get_engine_guide
-from streamwright.mcp.server import server
+from streamwright.mcp.server import MAX_RESULT_CHARS, server
 
 
 @pytest.fixture(scope="module")
@@ -46,7 +46,7 @@ def test_default_is_a_small_index(call):
 def test_a_schema_by_kind_or_schema_name(registry, kind, schema_name):
     result = get_core_schema(registry, kind)
 
-    assert result["schema_name"] == schema_name and result["schema"]["$schema"]
+    assert result["schema_name"] == schema_name and result["outline"]["properties"]
 
 
 def test_unknown_kind_is_an_error_through_the_protocol(call):
@@ -94,3 +94,17 @@ def test_the_duckdb_guide_explains_scopes_and_locks(registry):
     text = get_engine_guide(registry, "DuckDBJob", "State, scopes and locks")["text"]
     for term in ("scope:", "each:", "policy: prune", "skipped", "duckdb state ACTION", "retry JOB_ID", "txnAppId"):
         assert term in text
+
+
+@pytest.mark.parametrize("kind", discover_engines().kinds())
+def test_an_outline_is_small_and_its_dotted_paths_resolve(call, registry, kind):
+    outline = call("get_core_schema", kind=kind)["outline"]
+
+    assert len(json.dumps(outline)) <= MAX_RESULT_CHARS
+    paths = [f"{name}.{node['fields'][0]}" for name, node in outline["properties"].items() if node.get("fields")]
+    assert paths
+    for path in paths:
+        assert get_core_schema(registry, kind, path)["section"] == path
+    parent = paths[0].split(".")[0]
+    with pytest.raises(ToolError, match=rf"below '{parent}': .*{outline['properties'][parent]['fields'][0]}"):
+        get_core_schema(registry, kind, f"{parent}.no_such_field")

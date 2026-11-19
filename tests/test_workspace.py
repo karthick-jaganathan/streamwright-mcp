@@ -132,3 +132,27 @@ def test_source_yaml_error_does_not_echo_file_content(call, tmp_path):
     assert "TOPSECRETVALUE" not in repr(call("validate_source_config", source_dir=str(tmp_path)))
     assert "TOPSECRETVALUE" not in repr(call("inspect_stream_transform", source_dir=str(tmp_path),
                                              stream_name="orders"))
+
+
+def _source_folder(folder):
+    (folder / "streams").mkdir(parents=True)
+    (folder / "source.yaml").write_text("name: s\n", encoding="utf-8")
+    return folder
+
+
+def test_a_symlinked_stream_file_outside_the_roots_is_refused(call, tmp_path, outside_credentials):
+    source = _source_folder(tmp_path / "src")
+    (source / "streams" / "orders.yaml").symlink_to(outside_credentials)
+    for result in (call("validate_source_config", source_dir=str(source)),
+                   call("inspect_stream_transform", source_dir=str(source), stream_name="orders")):
+        assert "orders.yaml, which resolves outside the allowed workspace roots" in repr(result)
+        assert "TOPSECRETVALUE" not in repr(result) and str(outside_credentials) not in repr(result)
+
+
+def test_a_streams_root_does_not_reach_its_parents_source_yaml(call, monkeypatch, tmp_path):
+    source = _source_folder(tmp_path / "src")
+    (source / "streams" / "orders.yaml").write_text("name: orders\n", encoding="utf-8")
+    monkeypatch.setenv(ROOTS_ENV, str(source / "streams"))
+    for result in (call("validate_source_config", source_dir=str(source / "streams")),
+                   call("inspect_stream_transform", source_dir=str(source / "streams"), stream_name="orders")):
+        assert "which resolves outside the allowed workspace roots" in repr(result)

@@ -25,8 +25,8 @@ def test_stream_plan(call):
 
     assert result["found"] is True
     assert (result["stream_name"], result["source_name"]) == ("orders", "sample_orders")
-    assert result["requests"] == [{"name": "raw_orders", "kind": "http", "spec": {"http": {"path": "/v1/orders",
-                                                                                           "method": "GET"}}}]
+    assert result["requests"] == [{"name": "raw_orders", "kind": "http", "spec": {"operation": {"path": "/v1/orders",
+                                                                                                "method": "GET"}}}]
     step = result["transform"]["steps"][0]
     assert step["name"] == "clean_orders" and "SELECT record->>'id'" in step["select_sql"]
     assert step["reads"] == [{"name": "raw_orders", "type": "request"}]
@@ -78,12 +78,12 @@ def test_a_missing_primary_key_column_is_reported(call, tmp_path):
 
 def test_sdk_requests_are_not_http(call, tmp_path):
     pipeline = _stream_file(tmp_path, lambda text: text.replace(
-        "    http:\n      path: /v1/orders\n      method: GET",
-        "    sdk: restapi\n    service: orders\n    method: list"))
+        "    operation:\n      path: /v1/orders\n      method: GET",
+        "    operation:\n      service: orders\n      method: list"))
 
     request = call("inspect_stream_transform", source_dir=pipeline, stream_name="orders")["requests"][0]
 
-    assert request["kind"] == "sdk"
+    assert request["kind"] == "call" and request["spec"] == {"operation": {"service": "orders", "method": "list"}}
 
 
 def test_a_non_mapping_source_does_not_crash(call, tmp_path):

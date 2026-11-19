@@ -19,22 +19,34 @@
 
 from typing import Any
 
-from streamwright.core.config.loader import SourceFilesError, load_source
+from streamwright.core.config import grammar
+from streamwright.core.config.loader import SourceFilesError, read_source
 from streamwright.core.engine.sql import StreamPlan, plan_source
-from streamwright.core.runtime.components import request_body
 
-from streamwright.mcp.workspace import WorkspaceError, resolve_workspace_path
-
-
-def _request_kind(body: dict[str, Any]) -> str:
-    if "sdk" in body:
-        return "sdk"
-    return "async_job" if "async_job" in body else "http"
+from streamwright.mcp.workspace import WorkspaceError, confine_source, resolve_workspace_path
 
 
-def _requests(plan: StreamPlan) -> list[dict[str, Any]]:
-    return [{"name": item["name"], "kind": _request_kind(request_body(item)), "spec": request_body(item)}
-            for _, item in plan.requests]
+def _request_kind(item: dict[str, Any]) -> str:
+    if "async_job" in item:
+        return "async_job"
+    return "http" if grammar.operation_kind(item.get("operation")) == "request" else "call"
+
+
+def _requests(plan: StreamPlan, written: dict[str, Any]) -> list[dict[str, Any]]:
+    """The stream's requests as the source writes them (`operation:` or `async_job:`), each with its kind."""
+    items = {item.get("name"): item for item in written.get("requests") or () if isinstance(item, dict)}
+    requests = []
+    for _, item in plan.requests:
+        public = items.get(item["name"], {})
+        requests.append({"name": item["name"], "kind": _request_kind(public),
+                         "spec": {key: value for key, value in public.items() if key not in ("name", "partitions")}})
+    return requests
+
+
+def _written_stream(source: dict[str, Any], name: str) -> dict[str, Any]:
+    streams = source.get("streams")
+    return next((stream for stream in streams if isinstance(stream, dict) and stream.get("name") == name), {}) \
+        if isinstance(streams, list) else {}
 
 
 def _steps(plan: StreamPlan) -> list[dict[str, Any]]:
@@ -76,7 +88,8 @@ def inspect_stream_transform(source_dir: str, stream_name: str) -> dict[str, Any
     """The plan of one stream of the source at `source_dir` (inside the workspace roots)."""
     try:
         path = resolve_workspace_path(source_dir, "source_dir")
-        source = load_source(path)
+        confine_source(path)
+        source = read_source(path)
     except (WorkspaceError, SourceFilesError) as exc:
         return {"found": False, "error": str(exc)}
     if not isinstance(source, dict):
@@ -94,7 +107,7 @@ def inspect_stream_transform(source_dir: str, stream_name: str) -> dict[str, Any
         "description": stream.stream.get("description"),
         "partitions": stream.stream.get("partitions"),
         "incremental": stream.stream.get("incremental"),
-        "requests": _requests(stream),
+        "requests": _requests(stream, _written_stream(source, name)),
         "transform": {"mode": stream.mode, "steps": _steps(stream)},
         "exports": _exports(stream),
         "problems": plan.messages([name]),

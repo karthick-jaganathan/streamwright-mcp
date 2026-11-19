@@ -71,3 +71,15 @@ def get_cli_reference(command: str | None = None) -> dict[str, Any]:
     if parser is None:
         raise ToolError(f"Unknown command '{command}'; commands: {', '.join(sorted(parsers))}.")
     return _describe(path, parser)
+
+
+def help_texts() -> dict[str, str]:
+    """{command: its help text} for every command and subcommand, from one read of the parsers."""
+    parsers = command_parsers()
+    parsers.pop(SHARED_JOB_OPTIONS, None)
+    found, pending = {}, [([name], parser) for name, parser in sorted(parsers.items())]
+    while pending:
+        words, parser = pending.pop(0)
+        found[" ".join(words)] = parser.format_help()
+        pending += [([*words, name], child) for name, child in _children(parser).items()]
+    return found

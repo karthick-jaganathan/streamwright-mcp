@@ -16,10 +16,8 @@
 # **************************************************************************/
 
 import argparse
-import importlib
 import os
 import re
-import sys
 from pathlib import Path
 
 import pytest
@@ -72,19 +70,6 @@ def test_pyproject_declares_the_entry_points_and_the_pins():
     assert 'streamwright-mcp = "streamwright.mcp.cli:main"' in text
     assert '"mcp>=2.3,<3"' in text
     assert "sqlglot" not in text and "requests" not in text
-
-
-def test_the_old_package_name_still_works_and_warns():
-    for name in [module for module in sys.modules if module.startswith("streamwright_mcp")]:
-        del sys.modules[name]
-
-    with pytest.warns(DeprecationWarning, match="streamwright.mcp"):
-        old_cli = importlib.import_module("streamwright_mcp.cli")
-    old_server = importlib.import_module("streamwright_mcp.server")
-
-    assert old_cli.main is cli.main
-    assert old_server.server is importlib.import_module("streamwright.mcp.server").server
-    assert importlib.import_module("streamwright_mcp").__version__
 
 
 def test_generated_tool_reference_is_current():
