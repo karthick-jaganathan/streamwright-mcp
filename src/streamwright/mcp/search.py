@@ -75,10 +75,20 @@ def _index(registry: EngineRegistry) -> tuple[_Unit, ...]:
     return tuple(units)
 
 
+def _first(lower: str, terms: list[str]) -> int | None:
+    """Where the first of `terms` is in `lower` as a whole word (`ad` is not found in `loads`), or None."""
+    found = [match.start() for term in terms
+             for match in [re.search(r"(?<![a-z0-9])%s(?![a-z0-9])" % re.escape(term), lower)] if match]
+    return min(found) if found else None
+
+
 def _snippet(text: str, terms: list[str]) -> str:
+    """The text around the query's first identifier as written (`ad_group`), else around its first word."""
     lower = text.lower()
-    positions = [lower.find(term) for term in terms if term in lower]
-    start = max(0, min(positions) - SNIPPET // 4) if positions else 0
+    position = _first(lower, [term for term in terms if _IDENTIFIER.fullmatch(term)])
+    if position is None:
+        position = _first(lower, terms)
+    start = max(0, position - SNIPPET // 4) if position is not None else 0
     return " ".join(text[start:start + SNIPPET].split())
 
 

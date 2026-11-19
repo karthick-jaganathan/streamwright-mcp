@@ -81,3 +81,9 @@ def test_every_tool_result_is_capped():
     assert len(json.dumps(result)) <= MAX_RESULT_CHARS
     assert {"text", "rows", "nested"} <= set(result) and result["truncated"] is True and "search_docs" in result["hint"]
     assert cap_result({"small": [1, 2]}) == {"small": [1, 2]}
+
+
+def test_a_snippet_starts_at_the_identifier_not_inside_another_word():
+    text = "Loads the records. " + "x " * 300 + "Then `$.ad_group.id` AS ad_group_id."
+
+    assert "ad_group" in search._snippet(text, search.tokens("ad_group")).lower()
