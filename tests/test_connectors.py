@@ -24,6 +24,7 @@ import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 from streamwright.core.runtime import components
 from streamwright.core.runtime.definitions import engine_connectors
+from streamwright.core.sdk.contract import ConnectorDefinition
 
 from streamwright.mcp.connectors import (
     get_connector_contract,
@@ -163,6 +164,27 @@ def test_a_guide_section_includes_its_subsections():
 def test_a_guide_needs_an_installed_connector():
     with pytest.raises(EngineError, match="not installed"):
         get_connector_guide("no_such_connector")
+
+
+def test_a_type_of_an_sdk_connector_is_described_and_a_rest_connector_points_to_its_guide(call, monkeypatch):
+    sdk = ConnectorDefinition("typed_sdk", "Typed SDK", "test", connection=(), operations=(), adapters={},
+                              describe_type="typed_sdk_library:describe_type")
+    components.register(sdk)
+    monkeypatch.setattr(components, "describe_type", lambda name, type_name: {
+        "kind": "enum", "values": ["Daily", "Summary"], "connector": name, "name": type_name}
+        if type_name == "ReportAggregation" else None)
+    try:
+        assert call("describe_connector_type", name="typed_sdk", type_name="ReportAggregation") == {
+            "found": True, "kind": "enum", "values": ["Daily", "Summary"], "connector": "typed_sdk",
+            "name": "ReportAggregation"}
+        missing = call("describe_connector_type", name="typed_sdk", type_name="reportaggregation")
+        assert missing["found"] is False and "case-sensitive" in missing["hint"]
+    finally:
+        components.unregister("typed_sdk")
+    rest = call("describe_connector_type", name="postgres", type_name="Anything")
+    assert rest["found"] is False and "get_connector_guide('postgres')" in rest["hint"]
+    with pytest.raises(ToolError, match="Invalid type name"):
+        call("describe_connector_type", name="postgres", type_name="../x")
 
 
 INSTALLED = sorted(components.available())

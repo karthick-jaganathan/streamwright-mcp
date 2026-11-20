@@ -76,6 +76,18 @@ Args:
     name: The connector name, as listed by list_connectors.
     section: A section title (or part of one) from the list of sections.
 
+##### `describe_connector_type`
+
+A vendor type of an SDK connector, read offline from its installed library, so a call uses names and values
+the API accepts: an enum's values in their exact case (microsoft_ads `ReportAggregation`, `ReportTimePeriod`;
+meta_ads `AdsInsights.DatePreset`, `AdsInsights.Level`; google_ads `CampaignStatus`), or an object's fields
+and their types (`CampaignPerformanceReportRequest`, `AdsInsights`, `Campaign`), each of which you can look up
+in turn. REST API connectors have no library to ask: their guides list the values.
+
+Args:
+    name: The connector name, as listed by list_connectors.
+    type_name: The type as the vendor's library names it (case-sensitive).
+
 ##### `get_core_schema`
 
 The StreamWright JSON schemas (draft 7). Without arguments: an index of the engines, their schemas and
@@ -160,7 +172,8 @@ Args:
         (`client:{{ config.client }}`) and lock.each lists, as `--set` does on the command line.
     overlays: Paths of overlay manifests merged in order, inside the allowed workspace roots.
     strict: If True, warnings fail the validation.
-    analyze: If True, include the execution plan.
+    analyze: If True, include the execution plan, as `streamwright plan` prints it: the steps and outputs in run
+        order with what each reads and feeds (nothing runs).
 
 #### Resources
 

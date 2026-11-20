@@ -27,6 +27,7 @@ from streamwright.core.runtime import components
 from streamwright.mcp.engines import SOURCE_KIND, EngineDescriptor, EngineError, EngineRegistry, paged_guide
 
 _CONNECTOR_NAME = re.compile(r"[a-z][a-z0-9_]{0,62}")
+_TYPE_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_.]{0,199}\Z")
 _INSTALL_COMMAND = "streamwright connectors install {name}"
 _NESTED_DEFINITION = "definition"   # a job engine's contract may nest the connector definition under this key
 _OPERATION_SUMMARY = ("name", "kind", "idempotent", "max_chunk", "actions")
@@ -233,3 +234,28 @@ def get_connector_guide(name: str, section: str | None = None) -> dict[str, Any]
     if not text:
         raise EngineError(f"Connector '{name}' ships no guide; get_connector_contract('{name}') has its contract.")
     return {"name": name, **paged_guide(text)(section)}
+
+
+def describe_connector_type(name: str, type_name: str) -> dict[str, Any]:
+    """
+    A vendor type of an installed SDK connector, read offline from its installed library: an enum's values or an
+    object's fields and their types. Not found (or a REST connector, which has no library to ask): a hint instead.
+    """
+    if not is_valid_connector_name(name):
+        raise EngineError("Invalid connector name: expected lowercase letters, digits and '_', starting with a "
+                          "letter (max 63 characters).")
+    if not isinstance(type_name, str) or not _TYPE_NAME.match(type_name):
+        raise EngineError("Invalid type name: letters, digits, '_' and '.', starting with a letter (max 200).")
+    if name not in components.available():
+        raise EngineError(f"Connector '{name}' is not installed; get_connector_contract('{name}') says how to "
+                          "install it.")
+    if components.load(name).describe_type is None:
+        return {"connector": name, "name": type_name, "found": False,
+                "hint": f"'{name}' has no type lookup (REST API connectors have no library to ask): its guide lists "
+                        f"the values it takes, get_connector_guide('{name}')."}
+    found = components.describe_type(name, type_name)
+    if found is None:
+        return {"connector": name, "name": type_name, "found": False,
+                "hint": "No such type in the installed library. Names are case-sensitive, as the vendor's library "
+                        "spells them; an object's type lists its fields' types, which you can look up in turn."}
+    return {"found": True, **found}
