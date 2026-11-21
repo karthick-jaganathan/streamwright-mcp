@@ -18,8 +18,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://streamwright.web.app"
-Documentation = "https://streamwright.web.app/docs/ai/mcp"
+Homepage = "https://streamwright.net"
+Documentation = "https://streamwright.net/docs/ai/mcp"
 Repository = "https://github.com/karthick-jaganathan/streamwright-mcp"
 "Issue Tracker" = "https://github.com/karthick-jaganathan/streamwright-mcp/issues"
 

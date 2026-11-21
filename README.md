@@ -3,7 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/streamwright-mcp.svg)](https://pypi.org/project/streamwright-mcp/)
 [![Python](https://img.shields.io/pypi/pyversions/streamwright-mcp.svg)](https://pypi.org/project/streamwright-mcp/)
 [![License](https://img.shields.io/pypi/l/streamwright-mcp.svg)](https://github.com/karthick-jaganathan/streamwright-mcp/blob/main/LICENSE)
-[![Docs](https://img.shields.io/badge/docs-streamwright.web.app-brightgreen.svg)](https://streamwright.web.app/docs/ai/mcp/)
+[![Docs](https://img.shields.io/badge/docs-streamwright.net-brightgreen.svg)](https://streamwright.net/docs/ai/mcp/)
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for [StreamWright](https://pypi.org/project/streamwright/).
 AI assistants use it to discover connectors, read their contracts and the engine guides, and validate sources and
@@ -35,6 +35,6 @@ stdio by default; `--transport sse | streamable-http` needs `--allow-http` and a
 
 ## Links
 
-[Documentation](https://streamwright.web.app/docs/ai/mcp/) ·
+[Documentation](https://streamwright.net/docs/ai/mcp/) ·
 [Tool reference](https://github.com/karthick-jaganathan/streamwright-mcp/blob/main/docs/mcp.md) ·
 [Source code](https://github.com/karthick-jaganathan/streamwright-mcp)
