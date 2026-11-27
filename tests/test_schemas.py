@@ -92,7 +92,8 @@ def test_the_duckdb_guide_explains_scopes_and_locks(registry):
     sections = get_engine_guide(registry, "DuckDBJob")["sections"]
     assert "State, scopes and locks" in sections
     text = get_engine_guide(registry, "DuckDBJob", "State, scopes and locks")["text"]
-    for term in ("scope:", "each:", "policy: prune", "skipped", "duckdb state ACTION", "retry JOB_ID", "txnAppId"):
+    terms = ("scope:", "each:", "policy: prune", "skipped", "state ACTION --url URL", "retry JOB_ID", "txnAppId")
+    for term in terms:
         assert term in text
 
 
