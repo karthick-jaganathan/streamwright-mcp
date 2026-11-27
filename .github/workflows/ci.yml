@@ -48,7 +48,7 @@ jobs:
           python -m pip install --upgrade pip
           # core and the connector definitions the protocol tests read (postgres, mongodb) come from the core
           # release tag, so CI passes before that release reaches PyPI
-          core="git+https://github.com/karthick-jaganathan/streamwright.git@v0.1.17"
+          core="git+https://github.com/karthick-jaganathan/streamwright.git@v0.2.0"
           pip install "streamwright @ $core#subdirectory=core"
           for c in postgres mongodb; do
             pip install --no-deps "$core#subdirectory=connectors/readers/$c"

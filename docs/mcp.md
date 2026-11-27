@@ -150,9 +150,10 @@ option with its meaning, and the subcommands of a command.
 
 Args:
     command: Optional command, such as 'run', 'validate', 'duckdb run' (with --state-lock-policy,
-        --failed-job-policy, --max-job-attempts, --apply-state-migrations, --allow-lookup-exec), 'duckdb state'
-        (migrate, check, list, show, retry, abandon), 'state migrate' or 'spark run'. Without it: the command
-        list and the options every job command takes.
+        --failed-job-policy, --max-job-attempts, --apply-state-migrations, --allow-lookup-exec), 'state' (list,
+        show, retry, abandon, resend, skip, leases, purge, migrations, migrate, check: a job's batches from its
+        state database, by --url), 'state list' or 'spark run'. Without it: the command list and the options
+        every job command takes.
 
 ##### `validate_<engine>_job`
 

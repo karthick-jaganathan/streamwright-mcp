@@ -52,12 +52,13 @@ def test_engine_subcommands_report_their_own_options(call):
     run = call("get_cli_reference", command="duckdb run")
     assert run["command"] == "duckdb run"
     assert "--state-lock-policy" in run["help_text"] and "--state-lock-timeout" in run["help_text"]
-    state = call("get_cli_reference", command="duckdb state")
-    assert "runtime.state.scope" in state["help_text"]
-    assert {"list", "show", "retry", "abandon", "leases", "purge", "migrate", "check"} <= set(state["subcommands"])
-    assert "--no-run" in call("get_cli_reference", command="duckdb state retry")["help_text"]
-    assert "--strict" not in call("get_cli_reference", command="duckdb state list")["help_text"]
-    assert set(call("get_cli_reference", command="duckdb")["subcommands"]) == {"validate", "plan", "run", "state"}
+    state = call("get_cli_reference", command="state")
+    assert "--url" in state["help_text"] or "state database" in state["help_text"]
+    assert {"list", "show", "retry", "abandon", "resend", "skip", "leases", "purge", "migrations", "migrate",
+            "check"} <= set(state["subcommands"])
+    assert "--request-id" in call("get_cli_reference", command="state show")["help_text"]
+    assert "--strict" not in call("get_cli_reference", command="state list")["help_text"]
+    assert set(call("get_cli_reference", command="duckdb")["subcommands"]) == {"validate", "plan", "run"}
     assert "--dry-run" in call("get_cli_reference", command="state migrate")["help_text"]
 
 
@@ -69,7 +70,7 @@ def test_run_only_options_are_not_shared_job_options(call):
 def test_spark_subcommands_when_installed(call):
     pytest.importorskip("streamwright.spark")
     assert "--state-lock-policy" in call("get_cli_reference", command="spark run")["help_text"]
-    assert "lease" in call("get_cli_reference", command="spark state")["help_text"]
+    assert "state" not in call("get_cli_reference", command="spark")["subcommands"]   # `streamwright state --url`
 
 
 def _without_help(parser, path):
